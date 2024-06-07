@@ -21,6 +21,8 @@ i##标题修饰符\##
 ***一段文本***<br>
 ~~一段文本~~
 
+一段文本的`关键字`
+
 
 ##分割线用\-\-\-或\~\~\~表示
 
@@ -50,3 +52,35 @@ i##标题修饰符\##
 1. 人
    * 四肢
     1. 手
+
+
+###表格
+人名|技能|排行
+--|:--|:--|:
+蜘蛛侠|失败的man|1
+海王|钓鱼|2
+
+###插入代码片段
+```c
+   #include<stdio.h>
+   int main()
+   {
+      printf("holle world\n");
+      return 0;
+   }
+```
+
+```cpp
+   #include<iostream>
+   uisng namespace std;
+   int main()
+   {
+   cout<<"hello world"<<endl;
+   return 0;
+   }
+```
+```bash
+   ls -a
+   pwd 
+   cd .
+```
