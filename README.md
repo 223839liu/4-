@@ -84,3 +84,10 @@ i##标题修饰符\##
    pwd 
    cd .
 ```
+
+###超链接
+[github](https://github.com"点击访问")
+
+
+###插入图片
+[![1.png](https://i.postimg.cc/bJfBRKc2/1.png)](https://postimg.cc/jWvcx3js)
