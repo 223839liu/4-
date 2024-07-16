@@ -461,3 +461,7 @@ exit(0);
 return 0;
 }
 ```
+[![6.png](https://i.postimg.cc/FzDLrr6L/6.png)](https://postimg.cc/tnnTDjpq)
+[![7.png](https://i.postimg.cc/mZwMNjrg/7.png)](https://postimg.cc/Z0WCJr3G)
+[![8.png](https://i.postimg.cc/hPtmCmJb/8.png)](https://postimg.cc/Cd9d5zsz)
+
