@@ -179,7 +179,7 @@ github可编写readme，文本修饰语言
 ### 插入图片
 [![1.png](https://i.postimg.cc/bJfBRKc2/1.png)](https://postimg.cc/jWvcx3js)
 
-###进程01
+###进程
 1.单任务操作系统(单进程模式，一个时刻只能执行一个任务)
 2.如果要在古早时期电脑中执行多个软件，需要将当前占用的交换出来存储在软盘中，而后执行新任务
 3.需要让电脑中多个执行单位合理共享使用硬件资源，这也是多任务操作系统的前提
@@ -233,4 +233,231 @@ exit(0);
 return 0;
 }
 ```
+[![9735.png](https://i.postimg.cc/Qtbng7PK/9735.png)](https://postimg.cc/Kk1Nx1mm)
+不允许子进程踏出自己的工作区（else if代码快），子进程执行完自己的代码块通过exit（）结束进程
+```c
+   #include<stdio.h>
+   #include<unistd.h>
+   #include<stdlib.h>
+   #include<string.h>
+   int main(void){
+   pid_t pid;
+   int i;
+   for(i=0;i<5;i++){
+   pid =fork():
+   if(pid == 0)
+   break;
+   }
+   if(pid > 0){
+   printf("parent pid %d\n",getpid());
+   while(1)
+   sleep(1);
+   }else if(pid == 0){
+   printf("child pid %d\n",getpid(),i);
+   while(1)
+   sleep(1);
+   }else(
+   perror("fork call failed");
+   exit(0);
+   }
+   return 0;
+   }
+```
+父子进程的继承与拷贝
+[![1.png](https://i.postimg.cc/cHnf0G7x/1.png)](https://postimg.cc/WFsdwKfC)
+execl(const char \* psth,argv[0],argv[1],NULL)//进程重载最后一个参数一定要传null，表示命令参数传递完毕，不写函数失败
+[![2.png](https://i.postimg.cc/cHwtPMZ6/2.png)](https://postimg.cc/1nRzqF8Z)
+```c
+   #include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+#include<pthread.h>
+#include<signal.h>
+int main(void)
+{
+//重载ls -l
+pid_t pid;
+pid=fork();
+if(pid>0)
+{
+printf("Parent pid=%d\n",getpid());
+while(1);
+sleep(1);
+}
+else if(pid==0)
+{
+printf("Child pid=%d\n",getpid());
+//execl("/bin/ls","ls","-l",NULL);
+//重载浏览器
+execl("/user/bin/firefox","firefox","www.baidu.com",NULL);
+printf("execl success\n");
+exit(0);
+}
+else
+{
+perror("fork failed");
+exit(0);
+}
+}
+```
 
+zombie process 僵尸进程(zpid=wait(int * status)//进程回收，调用一次只回收一个僵尸，如果有多个僵尸进程，需要循环调用wait)
+[![3.png](https://i.postimg.cc/gkSjSBRN/3.png)](https://postimg.cc/2VWC3G0Z)
+```c
+   #include<stdio .h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<string.h>
+int main(void){
+pid_t pid;
+pid = fork();
+if(pid >0){
+printf("Parent pid %d Runing\n",getpid()) ;
+while(1)
+sleep(1);
+}else if(pid == 0){
+printf("Child pid %d Runingn",getpid());
+sleep(5);
+exit(0);
+}else{
+perror("fork call failed") ;
+exit(0);
+}
+return 0;
+}
+#include<stdio .h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<string.h>
+#include<sys/wait.h>
+int main(void){
+pid_t pid;
+pid = fork();
+if(pid >0){
+printf("Parent pid %d Runing\n",getpid()) ;
+zpid=wait(NULL);
+printf("Parent wait success ,zpid %d\n",zpid);
+while(1)
+sleep(1);
+}else if(pid == 0){
+printf("Child pid %d Runingn",getpid());
+sleep(5);
+exit(0);
+}else{
+perror("fork call failed") ;
+exit(0);
+}
+return 0;
+}
+```
+wait函数，阻塞回收子进程（僵尸进程），主动回收方案，阻塞回收会影响父进程任务的执行，在等待过程中无法进行其他操作
+[![4.png](https://i.postimg.cc/h47qWyH2/4.png)](https://postimg.cc/4nZ0p54c)
+```c
+#include<stdio .h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<string.h>
+#include<sys/wait.h>
+int main(void){
+pid_t pid;
+pid = fork();
+if(pid >0){
+printf("Parent pid %d Runing\n",getpid()) ;
+while((zpid=waitpid(-1,NULL,WNOHANG))!=-1)
+{
+if(zpid==0)
+{
+printf("Parent 执行自身任务一次\n");
+usleep(200000);
+}
+else if(zpid>0)
+{
+printf("回收成功，僵尸进程pid %d\n",zpid);
+break;
+}
+}
+while(1)
+sleep(1);
+}else if(pid == 0){
+printf("Child pid %d Runingn",getpid());
+sleep(5);
+exit(0);
+}else{
+perror("fork call failed") ;
+exit(0);
+}
+return 0;
+}
+```
+[![5.png](https://i.postimg.cc/LsrNzTNs/5.png)](https://postimg.cc/SXf64W00)
+```c
+#include<stdio .h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<string.h>
+#include<sys/wait.h>
+#include<sys/types.h>
+#include<sys/fcntl.h>
+#include<pthread.h>
+#include<signal.h>
+#include<sys/stat.h>
+int main(void)
+{
+pid_t pid;
+int i;
+for(i=0;i<2;i++)
+{
+pid=fork();
+if(pid===0)
+break;
+}
+if(pid>0)
+{
+printf("parent pid %d\n,waiting\n",getpid());
+pid_t zpid;
+int  status;
+while((zpid==waitpid(-1,&status,WNOHANG))!=-1)
+{
+if(zpid==0)
+{
+//EAGAIN
+}
+else if(zpid>0)
+{//验尸
+if(WIFEXITED(status))
+{//正常退出
+printf("Zombie process %d,政策退出，退出码或返回值\n",zpid,WEXITSTATUS(status));
+}
+if(WIFSIGNALED(status))//异常退出
+{
+printf("Zombie process %d ,异常退出，信号编号 %d\n",zpid,WTERMSIG(status));
+}
+}
+}
+else if(pid==0)
+{
+if(i==0)
+{
+printf("child %d pid %d\n,runing..\n",i,getpid());
+sleep(5);
+printf("child %d pid %d\n,exiting..\n",i,getpid());
+exit(20);
+}
+else if(i==1)
+{
+printf("child %d pid %d\n,runing..\n",i,getpid());
+while(1)
+sleep(1);
+}
+}
+else
+{
+perrror("fork call failed");
+exit(0);
+}
+return 0;
+}
+```
