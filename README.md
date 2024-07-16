@@ -178,3 +178,59 @@ github可编写readme，文本修饰语言
 
 ### 插入图片
 [![1.png](https://i.postimg.cc/bJfBRKc2/1.png)](https://postimg.cc/jWvcx3js)
+
+###进程01
+1.单任务操作系统(单进程模式，一个时刻只能执行一个任务)
+2.如果要在古早时期电脑中执行多个软件，需要将当前占用的交换出来存储在软盘中，而后执行新任务
+3.需要让电脑中多个执行单位合理共享使用硬件资源，这也是多任务操作系统的前提
+
+PROCESS进程
+操作系统默认的执行单元， 可以使用cpu 内存磁盘等等系统设备，完成特定任务，进程是最经典的调度单
+
+
+[![QQ-20240716095949.png](https://i.postimg.cc/13NcRP5g/QQ-20240716095949.png)](https://postimg.cc/xXnbgwmY)
+[![QQ-20240716133857.png](https://i.postimg.cc/gc13SjWx/QQ-20240716133857.png)](https://postimg.cc/rzCdz8zT)
+
+Linux进程状态
+就绪态、运行态、睡眠态、挂起态、终止态、僵尸态、孤儿态
+Linux进程开发，进程源语
+操作系统提供的一系列API函数接口，开发者可以使用完成进程功能开发任务
+```linux
+   pid_t gork(void)//进程创建，调用一次创建一个进程
+```
+
+```c
+   #include<stdio.h>
+   #include<unistd.h>
+   #include<stdlib.h>
+   #include<string.h>
+   #include<sys/types.h
+   #include<sys/stat.h>
+   #include<sys/fcntl.h>
+   #include<pthread.h>
+   #include<signal.h>
+//父进程从代码段的起始执到末尾，子进程被fork()创建，从fork之后执行到未尾
+int main(void){
+pid_t pid;
+pid = fork() :
+//fork创建成功,父进程中返回子进程的pid 33365 33366
+//在子进程中返回0,如果创建失败返回-1
+//pid == 33366
+if(pid > 0){
+//父进程工作区
+printf("parent Runing ...\n");
+while(1);
+}
+//pid == 0
+else if(pid ==0){
+//子进程工作区
+printf("child Runing....\n");
+while(i);
+}else{
+perror("fork call failed") ;
+exit(0);
+}
+return 0;
+}
+```
+
