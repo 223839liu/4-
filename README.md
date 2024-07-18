@@ -524,4 +524,83 @@ exit(0);
 return 0;
 }
 ```
+管道为空，写端未写数据，读端读取管道，读堵塞
+管道为满，读端未读数据，写端写管道，写堵塞
+写端关闭，如果管道有数据，读端读取数据管道剩余数据后再次读返回0，管道为空，直接返回0
+管道读端关闭，写端尝试向管道写数据，系统回向写端进程发送SIGPIPE，杀死写端进程
+
+\*编写一个服务端客户端模型(C5)，可以进行连接和基本的数据收发，客户端异常退出，服务器也异常退出，为什么?
+send(int sockfd,buffer,len,MSG\_NOSIGNAL)//如果系统服务端写端)发送SIGPIPE号，可以利用MSG\_NOSIGNAL 忽略信号
+
+匿名管道的缺点: 1.亲缘限制，只能亲缘进程可以使用其完成通信
+2.默认情况下管道使用无格式字节流传输，需要用户自行封装
+管道这种进程间通信方式，效率较好
+在所有unix或linux系统，管道都是可以使用的，但是其他系统 ?
+
+FIFO 有名管道
+需先创建管道文件 mkfifo 测试管道//创建管道文件
+p(管道文件) 管道文件没有存储能力，无法编辑
+创建管道文件后，系统会在内存中创建一个管道缓冲区
+管道文件被删除，系统立即清理管道缓冲区
+[![10.png](https://i.postimg.cc/zvPz3bfX/10.png)](https://postimg.cc/5QLdRtvZ)
+命名管道也是单工方式
+```c
+write:
+#include<stdio.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<string.h>
+#include<fcntl.h>
+#include<unistd.h>
+#include<stdlib.h>
+
+#define MSG "189034352432534234"
+
+int main(void)
+{
+//打开管道文件
+int wfd =open("测试管道",O_WRONLY);
+write(wfd,MSG,strlen(MSG));
+printf("write %d write msg successly..\n",getpid());
+close(wfd);
+return 0;
+}
+
+read:
+#include<stdio.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<string.h>
+#include<fcntl.h>
+#include<unistd.h>
+#include<stdlib.h>
+
+int main(void)
+{
+//打开管道文件
+char buf[1024];
+bzero(buf,sizeof(buf));
+int rfd =open("测试管道",O_WRONLY);
+read(rfd,buf,sizeof(buf));
+printf("Read %d msg=%s\n",getpid(),buf);
+close(rfd);
+unlink("测试管道");//删除管道文件
+return 0;
+}
+```
+访问命名管道，必须满足两种权限，读写。才可以成功打开和使用管道，如果只有一种访问权限，会阻塞另一种权限
+
+单进程只要满足两种权限（O\_RDWR)，可以直接打开和使用管道
+
+有名管道使用时的特殊情况:
+1.权限要求， 有名管道要求，满足两种访问权限才可以打开使用管道，否则要阻塞等待另一种
+2.如果在一个进程中有多个读序列， 阻塞只会对第一个读序列生效，其他都会设置非阻塞
+多线程为进程读取数据，一个线程阻塞等待即可，其他线程设置非阻塞立即返回，执行其他，避免阻塞开销
+3.原子使用管道( 传输速度较慢，但是数据完整性比较好) 和 非原子使用管道(传输效率高， 无法保证数据完整性)
+原子写管道：（每次写大小小于管道缓冲区大小）非原子写管道：（每次写大小大于管道缓冲区大小）
+非原子访问请况下，系统不会控制流，只要管通绿冲区有余量，写端可以立即写入数据，传输效率高，但是读端读取数据后要校验完整性，邀免数据包的异常
+不要频繁变更传输模型
+
+MMAP文件共享映射
+void * ptr =mmap(NULL);
 
