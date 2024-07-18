@@ -465,3 +465,63 @@ return 0;
 [![7.png](https://i.postimg.cc/mZwMNjrg/7.png)](https://postimg.cc/Z0WCJr3G)
 [![8.png](https://i.postimg.cc/hPtmCmJb/8.png)](https://postimg.cc/Cd9d5zsz)
 
+
+###进程间通信
+进程间通信的简写是ipc,可以利用这种技术完成多个进程间的数据传递，信息收发
+原始数据在进程第一阶段进行处理封装，再转发到进程第二阶段进行处理封装，再转发到进程第三阶段进行处理封装（处理完毕）最后得到目标数据
+网络通信也是进程间通信
+进程间通信方式有很多：匿名管道（pipe）,消息队列（posix，systemv）,内存共享映射（MMAP），信号（signal），套接字技术（socket），有名管道（FIFO）
+
+进程A给进程B发消息：无法直接从用户层直接发，但进程的内核层是共享的，都是将用户层的数据通过内核层来发送
+（绝大多数进程间通信都是利用内核层实现的）（内核层共享内存）
+PIPE 匿名通道：
+1.流通性（传输介质）
+2.方向性
+3.暂存能力（存储量很少）
+A\-\>B；A先在用户层创建一个pipe（fds）（int fds[2]）函数，函数被调用后，在管道中创建一个缓冲区（PIPE\_BUFFER）(4K)环形队列（不同版本之间的管道大小不一样，旧：64K,新：4K），当管道创建成功后，系统会将读写管道的两个描述符传出到fds中，让用户可以读写管道
+文件描述符应是最小的未使用的（3）（0：标准输入，1：标准输出，2：标准错误）
+匿名管道只能在亲缘关系间的管道间用
+
+[![9.png](https://i.postimg.cc/6p1t6NFB/9.png)](https://postimg.cc/NKTWbZgn)
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<string.h>
+#include<stdlib.h>
+#include<sys/wait.h>
+
+#define MSG "Can u hear Me?"
+
+int main(void)
+{
+int fds[2];
+pipe(fds);
+pid_t pid;
+pid=fork();
+if(pid>0)
+{
+printf("parent %d Send Msg\n",getpid());
+close(fds[0]);
+write(fds[1],MSG,strlen(MSG));
+wait(NULL);
+close(fds[1]);
+}
+else if(pid==0)
+{
+close(fds[1]);
+char buffer[1024];
+bzero(buffer,sizeof(buffer));
+read(fds[0],buffer,sizeof(buffer));
+printf("child Read MSG=%s\n",buffer);
+close(fds[0]);
+exit(0);
+}
+else
+{
+perror("fork call  failed");
+exit(0);
+}
+return 0;
+}
+```
+
