@@ -725,4 +725,104 @@ return 0;
 }
 ```
 关于mmap的同步机制
+硬盘中经常使用的数据加载到内存中，从而降低磁头的寻址频率，保护磁头，这种技术就叫高速缓存技术date\_cache
+用户空间中有一块映射内存，它不在栈和堆，在库空间中，因为库空间具有弹性
+高速缓存会将数据映射到映射内存（虚拟地址）
+用户访问映射时会产生缺页中断，发生缺页中断会将高速缓存的数据拷贝放到物理内存中
+当用户对数据就行修改访问时会产生脏页
+当脏页被访问我完后将会脏页的数据重写回内存
+[![11.png](https://i.postimg.cc/2yqPyGKh/11.png)](https://postimg.cc/0KstHYxy)
+
+
+从文件中读取数据
+read （用户从硬盘读取数据总共4次切换（来回），2次拷贝）
+先将硬盘读取到DMA（缓存引擎）：DMA copy（可以不算到拷贝次数中）（预读数据）
+DMA会将数据拷贝到内核缓冲区（date cache）（第一次）
+内核缓冲区将数据拷贝到用户缓冲区（buffer）（第二次）
+mmap(4次切换，1次拷贝)
+mmap会在内核缓冲区和用户缓冲区之间就行内存映射
+，而不是拷贝
+mmap也可用于socket通信
+只是硬盘换成了网卡，内核缓冲区换成了SOCKET缓冲区
+网络上常用的拷贝技术（ZERO\_COPY)
+零拷贝技术不是只零次拷贝而是只减少拷贝次数
+SendFile
+两个缓冲区直接映射（只适用文件传输）
+[![12.png](https://i.postimg.cc/K863Xhmx/12.png)](https://postimg.cc/5Xm2vGHR)
+
+
+使用mmap出现的异常
+映射内存的大小不要大于文件实际大小，因为再映射时要加载文件大小来设置映射内存的可用大小的
+再进行映射时， 一般要看映射文件大小，如果映射内存与映射文件大小不符， 再访问内存时产生总线错误，系统向进程发送SIGBUS,杀死进程
+总线错误就跟溢出有关
+
+
+进程间关系
+亲缘关系
+Linux 操作系统下，进程间的关系是强亲缘(父子)，弱亲缘(爷孙)
+爷爷进程与孙子进程最低限度亲缘(继承关系)
+强亲缘关系(父子进程)， 子进程被父进程创建， 子进程的任务被父进程指定，继承父进程数据，子进程结束后，父进程负责回收避免僵尸问题，整个子进程生命周期父进程全程参与
+```c
+clude<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+#include<pthread.h>
+#include<signal.h>
+int main(void)
+{
+printf("app pid %d,app parent pid  %d\n",getpid(),getppid());
+while(1)
+{
+sleep(1);
+}
+return 0;
+}
+```
+[![13.png](https://i.postimg.cc/dtHwZ2ff/13.png)](https://postimg.cc/bstKKtp0)
+Process Group组关系
+进程组的销毁不跟组长是否存在有关，只有组中最后一个进程结束或转移，没有进程才能销毁
+getpid()//返回进程pid
+getppid()//返回进程父进程id
+getpgrp()//返回进程进程组id
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+#include<pthread.h>
+#include<signal.h>
+int main(void)
+{
+pid_t pid;
+int i;
+for(i=0;i<3;i++)
+{
+pid=fork();
+if(pid==0)
+break;
+}
+if(pid>0)
+{
+printf("parent  pid %d ppid %d pgrp %d\n",getpid(),getppid(),getpgrp());
+while(1)
+sleep(1);
+}
+else if(pid==0)
+{
+printf("child %d pid %d ppid %d pgrp %d\n",i,getpid(),getppid(),getpgrp());
+while(1)
+sleep(1);
+}
+else
+{
+perror("fork call failed");
+exit(0);
+}
+return 0;
+}
+```
 
