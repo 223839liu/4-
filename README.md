@@ -602,5 +602,127 @@ return 0;
 不要频繁变更传输模型
 
 MMAP文件共享映射
-void * ptr =mmap(NULL);
+void * ptr =mmap(NULL,映射大小,PROT\_READ|PROT\_WRITE,映射方式,文件描述符,文件描述符，映射偏移量);
+私有映射：拷贝映射，将映射文件的数据拷贝一份到映射内存，两份数据独立无关联
+共享映射：同步映射，同步映射文件的数据映射一份给进程，两份数据建立sync同步机制，对一份数据的修改会立即更新给另一份
+映射内存地址，如果传NULL，系统自动分配映射内存
+一般是文件大小
+映射内存权限 PROT\_READ|PROT\_WRITE|PROT\_EXEC|PROT\_NONE
+共享映射(MAP\_SHARED) 私有映射 MAP\_PRIVATE
+映射文件的描述符，映射时使用访问磁盘数据
+映射偏移量，mmap支持便宜映射，每次映射一部分（适合处理大文件）
+munmap(void \* ptr,映射大小)//释放映射内存
+映射成功返回ptr,映射内存地址，失败返回MAP\_FAILED关键字
+mmap要确定通信方向，一个负责编辑修改映射内存马，一个负责显示打印映射内存数据，不要让两映射同时修改访问映射内存，会导致出现数据异常
+```c
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<unistd.h>
+#include<sys/mman.h>
+#include<sys/stat.h>
+#include<sys/types.h>
+#include<fcntl.h>
+int main(void)
+{
+int fd=open("MAp_File",O_RDWR);//注意文件名不要写错
+int size;
+size=lseek(fd,0,SEEK_END);//获取文件大小
+int * ptr=NULL;
+if((ptr =mmap(NULL,size,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0))==MAP_FAILED)
+{
+perror("mmap call failed");
+exit(0);
+}
+close(fd);
+//修改映射内存数据，让它同步给文件
+ptr[0]=0X34333231;//通过16进制来直接修改文件内容，16进制在存储时是倒着存储
+nmap(ptr,size);
+return 0;
+}
+```
+mmap通过open时的权限来判别进程的身份
+mmap是否可以读写映射，取决于文件打开权限，对要打开文件时有足够的权限，那么可以进行读写映射，映射的权限小于等于文件的权限
+mmap读写效率最高
+写端：打开映射文件，扩展空文件，共享映射，向映射内存导入数据
+读端：打开映射文件，共享映射，打印内存数据
+```c
+写端：
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<unistd.h>
+#include<sys/mman.h>
+#include<sys/stat.h>
+#include<sys/types.h>
+#include<fcntl.h>
+
+typedef struct
+{
+ int id;
+char date[1024];
+}msg_t;
+
+int main(void)
+{
+int fd=open("MAp_File",O_RDWR);
+//扩展空文件
+ftruncate(fd,sizeof(msg_t));
+msg_t  * ptr=NULL;
+if((ptr =mmap(NULL,sizeof(msg_t),PROT_READ|PROT_WRITE,MAP_SHARED,fd,0))==MAP_FAILED)
+{
+perror("mmap call failed");
+exit(0);
+}
+close(fd);
+//持续向映射文件内存写入数据
+ptr->id=0;
+bzero(ptr->date,1024);
+while(1)
+{
+++(ptr->id);
+sprintf(ptr->date,"test message,msg id %d",ptr->id);
+sleep(1);
+}
+munmap(ptr,sizeof(msg_t));
+return 0;
+}
+
+读端：
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<unistd.h>
+#include<sys/mman.h>
+#include<sys/stat.h>
+#include<sys/types.h>
+#include<fcntl.h>
+
+typedef struct
+{
+ int id;
+char date[1024];
+}msg_t;
+
+int main(void)
+{
+int fd=open("MAp_File",O_RDWR);
+msg_t * ptr=NULL;
+if((ptr =mmap(NULL,sizeof(msg_t),PROT_READ|PROT_WRITE,MAP_SHARED,fd,0))==MAP_FAILED)
+{
+perror("mmap call failed");
+exit(0);
+}
+close(fd);
+//持续显示映射内存数据
+while(1)
+{
+printf("msgid= %d,msg =%s\n",ptr->id,ptr->date);
+sleep(1);
+}
+munmap(ptr,sizeof(msg_t));
+return 0;
+}
+```
+关于mmap的同步机制
 
