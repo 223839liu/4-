@@ -825,4 +825,250 @@ exit(0);
 return 0;
 }
 ```
+进程组的销毁，组中的最后一个进程，结束戏转移， 进程组种没有进程时系统会择放进程组
+就近原则，子进程被创建后默认归纳到父进程同组成为组员
+子进程一定是父进程的组员进程，这个既念是错的，因为组员是可以变动的，可以将组员组员进程转移到其他组中去
+组长是不允许转移的
+组长进程无法创建进程组，组员进程可以创建新租，脱离原有的进程组，成为新的组长
+子进程独立新组后，亲缘关系不变，子进程结束后由父进程回收（子进程脱离原有进程组，父进程通过waitpid进行跨组回收）
+setpgid(pid\_t pid,pid\_t gid)//可以让组员创建新组，也可以将一个组员转移到其他组
+eg:setpgid(1000,1000)setpgid(1000,5000)//转移时目标组必须存在，需要对目标组有访问权限
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+#include<pthread.h>
+#include<signal.h>
+int main(void)
+{
+pid_t pid;
+int i;
+for(i=0;i<3;i++)
+{
+pid=fork();
+if(pid==0)
+break;
+}
+if(pid>0)
+{
+printf("parent  pid %d ppid %d pgrp %d\n",getpid(),getppid(),getpgrp());
+while(1)
+sleep(1);
+}
+else if(pid==0)
+{
+if(i==2)
+{
+printf("child %d  pid %d ppid %d pgrp %d\n",i,getpid(),getppid(),getpgrp());
+printf("child %d pid %d create process group\n",i,getpid());
+setpgid(getpid(),getpid());//创建组
+printf("child %d  pid %d ppid %d pgrp %d\n",i,getpid(),getppid(),getpgrp());
+while(1)
+sleep(1);
+}
+printf("child %d  pid %d ppid %d pgrp %d\n",i,getpid(),getppid(),getpgrp());
+while(1)
+sleep(1);
+}
+else
+{
+perror("fork call failed");
+exit(0);
+}
+return 0;
+}
+```
+process session 会话关系
+会话是一种终端进程管理的组织结构
+bash是会话发起者，剩下的无论是父还是子都是会话参与者
+pid==gid==sid//则说明它是会话发起者
+pid==gid//说明它是父进程
+会话和进程组的区别：当会话发起者结束会话时，系统会以组的形式杀死一组（只杀一组），杀死的是终端子进程的那一组，终端子进程必然被杀死，但终端子进程的子进程可以创建一个新组从而存活,并不意味着脱离会话
+```c
+#include<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+#include<pthread.h>
+#include<signal.h>
+int main(void)
+{
+pid_t pid;
+int i;
+for(i=0;i<3;i++)
+{
+pid=fork();
+if(pid==0)
+break;
+}
+if(pid>0)
+{
+printf("parent  pid %d ppid %d pgrp %d\n",getpid(),getppid(),getpgrp());
+while(1)
+sleep(1);
+}
+else if(pid==0)
+{
+printf("child %d  pid %d ppid %d pgrp %d\n",i,getpid(),getppid(),getpgrp());
+while(1)
+sleep(1);
+}
+else
+{
+perror("fork call failed");
+exit(0);
+}
+return 0;
+}
+```
+```linux
+ps aux
+```
+让子进程脱离会话，创建新会话，避免被终端杀死（简称脱离控制终端）
+```c
+getsid(getpid())//返回会话sid
+setsid()//创建进程组并创建新会话，脱控制终端
+```
+[![14.png](https://i.postimg.cc/XvjSTnTS/14.png)](https://postimg.cc/G455DnLq)
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+#include<pthread.h>
+#include<signal.h>
+int main(void)
+{
+pid_t pid;
+int i;
+for(i=0;i<3;i++)
+{
+pid=fork();
+if(pid==0)
+break;
+}
+if(pid>0)
+{
+printf("parent  pid %d ppid %d pgrp %d\n",getpid(),getppid(),getpgrp());
+while(1)
+sleep(1);
+}
+else if(pid==0)
+{
+if(i==0)
+{
+//创建新进程组，避免被会话杀死
+setpgid(getpid(),getpid());
+while(1)
+sleep(1);
+}
+printf("child %d  pid %d ppid %d pgrp %d\n",i,getpid(),getppid(),getpgrp());
+while(1)
+sleep(1);
+}
+else
+{
+perror("fork call failed");
+exit(0);
+}
+return 0;
+}
+```
+```linux
+ps ajx//专门查看进程间关系的
+```
+orphan 孤儿进程
+当父进程因特殊原因消失时，子进程会被托管给一个专门托管孤儿进程的一个进程
+原因：如果没有托管处理机制，那么就会出现无法被处理的僵尸进程
+孤儿进程这种活态进程的免害是有弹性的，取决于孤儿进程的作业，如果孤儿进程被设置大量频紫的申请占用系统资源，那么这种孤儿进程危害极大
+子进程一旦被托管，那么托管进程只负责回收子进程结束后的资源，不对孤儿进程就行管理
+孤儿进程是异常多进程的残留，会影响新进程的创建与使用
+开发者创建父子进程模型，让父进程退出，子进程变为守护进程
+[![15.png](https://i.postimg.cc/pL2Fr17Q/15.png)](https://postimg.cc/Tp4wHQTh)
+这个模型是同组下的检测处理
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+#include<pthread.h>
+#include<signal.h>
+
+int main(void)
+{
+pid_t pid;
+pid=fork();
+if(pid>0)
+{
+printf("parent pid %d\n",getpid());
+sleep(10);
+exit(0);
+}
+else if(pid==0)
+{
+printf("child pid %d ppid %d\n",getpid(),getppid());
+sleep(11);
+while(1)
+sleep(1);//子进程变为孤儿进程
+}
+else
+{
+perror("fork call failed");
+exit(0);
+}
+return 0;
+}
+```
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+#include<pthread.h>
+#include<signal.h>
+
+int main(void)
+{
+pid_t pid;
+pid=fork();
+if(pid>0)
+{
+printf("parent pid %d\n",getpid());
+sleep(10);
+exit(0);
+}
+else if(pid==0)
+{
+while(1){
+printf("child pid %d ppid %d\n",getpid(),getppid());
+sleep(1);
+}
+//子进程变为孤儿进程
+}
+else
+{
+perror("fork call failed");
+exit(0);
+}
+return 0;
+}
+//这种可以在终端上直观的体现
+```
+这种可以继续输入命令，命令能正常执行
+deamon process 守护进程/精灵进程（shell设置进程开机启动）
+守护进程是经典的后台服务进程，持续在后台运行完成特殊服务，执行特定功能，不干预前台任务
+普通的软件进程随用户的使用持续， 生命周期较短
+守护进程生命周期较长， 开机启动关机结束， 持续服务于后台
+守护进程不能持续占用系统资源(cpu，内存等等)， 长时间处于低开销模式
+
 
