@@ -1070,5 +1070,200 @@ deamon process 守护进程/精灵进程（shell设置进程开机启动）
 普通的软件进程随用户的使用持续， 生命周期较短
 守护进程生命周期较长， 开机启动关机结束， 持续服务于后台
 守护进程不能持续占用系统资源(cpu，内存等等)， 长时间处于低开销模式
+守护进程的工作模式: 间隔执行(sleep)，定时启动，条件触发 ，低消模式(大多数时间进程处于睡眠态)
+后台服务进程不允许访问前台，标准输入标准输出不使用，标准出错(dup2实现重定向)
+守护进程其实是孤儿进程， 人为的孤儿进程
 
+守护进程的实现流程
+1.fork创建子进程，父进程退出
+2.子进程创建新会话，脱离控制终端
+3.关闭无用的描述符，将表标准出错流重定向
+4.修改进程工作路径，改为根目录(普通用户不要改为根目录，不然会没有权限)chdir("./");
+5.修改目标主机进程umask文件权限掩码，改为0002或0000
+6.守护进程的核心工作
+7.守护进程退出处理释放执行过程中申请的资源数据守护进程结束时主动释放
+1.创建一个 Daemon process 文件夹 ， 在此文件夹中开发守护进程
+2.编译后，守护进程的程序名为Daemon\_process
+3.守护进程创建日志文件，文件名为 time.log
+4.守护进程间隔执行，每间隔3s向日志文件中写入系统时间
+5.守护进程后台运行
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<fcntl.h>
+#include<string.h>
+#include<signal.h>
+#include<time.h>
 
+void Deamon_business(void)
+{
+int fd;
+time_t tm;//时间种子类型
+char time_buffer[1024];
+bzero(time_buffer,sizeof(time_buffer));
+if((fd=open("time.log",O_RDWR|O_CREAT,0664))==-1)
+{
+perror("open failed");
+exit(0);
+}
+while(1)
+{
+tm=time(NULL);
+ctime_r(&tm,time_buffer);
+write(fd,time_buffer,strlen(time_buffer));
+bzero(time_buffer,sizeof(time_buffer));
+sleep(3);
+}
+close(fd);
+}
+void Deamon_create(void)
+{//创建子进程，父进程退出
+pid_t pid;
+pid=fork();
+if(pid>0)
+{
+exit(0);//父进程直接退出
+}
+else if(pid==0)
+{
+//创建新会话，脱离中断
+setsid();
+//改变进程工作路径
+chdir("./");
+//修改进程umask
+umask(0002);
+//关闭无用描述符
+close(STDIN_FILENO);
+close(STDOUT_FILENO);
+//重定向STDERR_FILENO
+
+//执行守护进程的工作
+Deamon_business();
+//守护进程的退出处理（释放内存）
+
+}
+else
+{
+perror("fork call failed");
+exit(0);
+}
+}
+
+int main(void)
+{
+Deamon_create();
+
+return 0;
+}
+```
+```c
+STDIN\_FILENO//标准输入流读取外部数据
+STDOUT\_FILENO//标准输出流显示数据打印到显示器上
+STDERR\_FILENO//标准错误流，通过标准输出流会打印到显示器上
+```c
+include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<fcntl.h>
+#include<string.h>
+#include<signal.h>
+#include<time.h>
+
+void Deamon_business(void)
+{
+int fd;
+time_t tm;//时间种子类型
+char time_buffer[1024];
+bzero(time_buffer,sizeof(time_buffer));
+if((fd=open("fsdf45af",O_RDWR))==-1)
+{
+perror("open failed");
+exit(0);
+}
+while(1)
+{
+tm=time(NULL);
+ctime_r(&tm,time_buffer);
+write(fd,time_buffer,strlen(time_buffer));
+bzero(time_buffer,sizeof(time_buffer));
+sleep(3);
+}
+close(fd);
+}
+void Deamon_create(void)
+{//创建子进程，父进程退出
+pid_t pid;
+pid=fork();
+if(pid>0)
+{
+exit(0);//父进程直接退出
+}
+else if(pid==0)
+{
+//创建新会话，脱离中断
+setsid();
+//改变进程工作路径
+chdir("./");
+//修改进程umask
+umask(0002);
+//关闭无用描述符
+close(STDIN_FILENO);
+close(STDOUT_FILENO);
+//重定向STDERR_FILENO
+int fd=open("ERROR_FILE",O_RDWR|O_CREAT,0664);//创建重>定向错误文件
+dup2(fd,STDERR_FILENO);//重定向
+//执行守护进程的工作
+Deamon_business();
+//守护进程的退出处理（释放内存）
+
+}
+else
+{
+perror("fork call failed");
+exit(0);
+}
+}
+
+int main(void)
+{
+Deamon_create();
+
+return 0;
+}
+```
+[![16.png](https://i.postimg.cc/hvXqBwkJ/16.png)](https://postimg.cc/Cnp2CvLY)
+开机启动
+ shell脚本写完直接跑，不需要去启动
+```linux
+#!/bin/bash
+
+date//查看日期
+
+ls 
+
+ps aux
+```
+```linux
+sudo chmod 0775 shell脚本名//0775代表执行权限
+```
+启动块信息最好粘电脑自带的，要注意空格和#
+写完shell脚本后要通过命令复制一份到/etc/init.d/中
+```linux
+sudo update-rc.d shell_start start 99 2.
+//删除命令：
+sudo update-rc.d shell remove
+```
+信号
+信号是linux系统下的经典技术
+一般操作系统利用信号杀死违规进程，典型进程干预手段， 信号除了杀死进程外也可以挂起进程
+kI -l #看系统支持的信号
+32,33号预留给线程库NTPL
+两种信号，经典信号/实时信号
+1-31 是unix经典信号，软件开发工程师使用，例如进程通信，信号浦捉等等
+34-64 是盘定义信号，一般驱动开发使用，偏底层
+[![17.png](https://i.postimg.cc/jjfxkKCk/17.png)](https://postimg.cc/HJp1VqwQ)
