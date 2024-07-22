@@ -1267,3 +1267,62 @@ kI -l #看系统支持的信号
 1-31 是unix经典信号，软件开发工程师使用，例如进程通信，信号浦捉等等
 34-64 是盘定义信号，一般驱动开发使用，偏底层
 [![17.png](https://i.postimg.cc/jjfxkKCk/17.png)](https://postimg.cc/HJp1VqwQ)
+ctl+/(SIGOUIT/3) 系统向唯一的前台进程发送3号信号，杀死目标进程
+ctl+z(SIGSTP/20) 系统向唯一的前台进程发送20号信号， 挂起目标进程
+```linux
+^z//挂起目标进程
+jobs//查看手动挂起的进程
+fg 1//将挂起的进程让它运行
+bg 1//让挂起的进程后台运行
+```
+2,命令发送信号
+```linux
+kill -signo pid //此命令可以向任意进程发送任意信号
+```
+3.函数发送信号
+```linux
+//专用头文件：
+#include<signal.h>
+kill(pid_t pid,int signal)//#向任意进程发送任意信号
+raise(int signo) //#向自身发送任意信号
+void abort(void) //#向自身发送SIGABRT/6信号
+```
+```c
+#include<signal.h>
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+//kill -signo pid
+// ./mykill signo pid
+int main(int argc, char ** argv)
+{
+if(argc<3)
+{
+printf("pram Failed,TryAgain..\n");
+exit(0);
+}
+kill(atoi(argv[2]),atoi(argv[1]));
+return 0;
+}
+```
+4.硬件异常产生信号
+对只读内存进行写操作，属于违规操作硬件，系统向违规进程发送 SIGSEGV(11)信号，杀死违规进程
+```c
+#include<signal.h>
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+//kill -signo pid
+// ./mykill signo pid
+int main(int argc, char ** argv)
+{
+char * str="hell";
+str="xxxx";
+str[0]='H';
+kill(atoi(argv[2]),atoi(argv[1]));
+return 0;
+}
+```
+
+
+
