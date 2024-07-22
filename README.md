@@ -1305,8 +1305,13 @@ kill(atoi(argv[2]),atoi(argv[1]));
 return 0;
 }
 ```
+
 4.硬件异常产生信号
-对只读内存进行写操作，属于违规操作硬件，系统向违规进程发送 SIGSEGV(11)信号，杀死违规进程
+对只读内存进行写操作，属于违规操作硬件，系统向违规进程发送 SIGSEGV(11)信号，杀死违规进程 
+SIGSEGV信号可能是系统发出的，也有可能是其他用户发出的
+SIGBUS（总线错误）：越界访问，无效访问内存，系统向违规进程发送SIGBUS（7）信号，杀死违规进程
+SIGFPE(浮点数例外),cpu违规运算，运算异常，系统向违规进程发送SIGFPE(8)，杀死进程
+
 ```c
 #include<signal.h>
 #include<stdio.h>
@@ -1323,6 +1328,53 @@ kill(atoi(argv[2]),atoi(argv[1]));
 return 0;
 }
 ```
+5.软条件触发信号
+软件能发信号，在使用某个组件时，例如定时器，窥时到时，能发软条件，系统向进程发送信号
+ [![18.png](https://i.postimg.cc/6p4bPtxL/18.png)](https://postimg.cc/qN0GhfRz)
+管道读端结束，写端向管道写数据 (触发软条件，)系统向写端进程发送SIGPIPE13信号杀死写端进程
+信号的三大行为，与五种默认处理动作
+SIGNAL
+SIG\_DFL 默认行为：TERM//直接杀死目标进程，sigkill,slgint
+CORE//直接杀死进程，但是转储核心处理文件(dump core)，SIGQUIT，SIGSEGV SIGFPE SIGBUS
+IGN//通知国收信号 SIGCHLD,忽路信号。 发到进程不会影响进程
+STOP//挂起进程,SIGSTP，SIGTSTP
+CONT//唤醒进程，SIGCONT
+信号处置进程后， 可以通过结果分析信号的默认动作
+5种默认处理动作
+SIG\_IGN 忽略行为：NULL 忽略行为没有处理动作，直接丢奔，不会影响进程
+忽略行为的优先级比动作要高
+SIG\_ACTION 捕捉行为（自定义动作）：捕捉行为可以实现， 信号绑定自定义任务
+信号触发， 执行捕捉函数，执行自定义任务
+捕捉技术在开发中普遍使用
 
+让信号失效的三种方式：屏蔽，忽略，捕捉
+系统保留高权级信号， 这类信号无法被屏蔽， 捕捉和忽略，服务于内核，只要发出必然递达
+SIGKILL(9)，无法被屏蔽，捕捉，忽略，只要发出必然杀死
+SIGSTOP(19)无法被屏蔽，捕捉怨略， 只要发出必然挂起
+
+信号的传递过程：
+信号集，是一个位图，每一位表示一个信号，位码是0或1
+信号无法通过未决信号集，位码是1， 此信号直接丢弃
+如果信号通过未决信号集，系统将对应的位码设置1，标记为未决态信号，表示此信号正在传送，还未处理
+HANDLER信号选择行为动作处置进程(信号处理流程)
+屏藏宇信号集，用户自行设置，可以屏蔽阻塞信号，使其无法递达
+信号屏蔽字对应的位变为1，可以实现阻塞信号
+如果信号通过屏蔽字，进入handler处理流程，系统会将来决信号集对应位码翻转回0，表示从来决态信号切为递达态信号
+信号屏蔽是延迟处理,此信号未消失， 某一刻屏蔽解除， 此信号马上递达，处置进程
+前30个信号不支持队列，后30个信号支持队列，因为前30个信号是kill杀死进程用的一个就行，后30个是开发使用的
+[![19.png](https://i.postimg.cc/sx77SjBK/19.png)](https://postimg.cc/vx84wdt6)
+
+信号屏蔽实现：
+```c
+#include <signal.h>
+sigset_t oldset
+sigset_t set; //信号集类型
+sigemptyset(sigset_t*set);//将set信号集种所有位初始化为0
+sigfillset(sigset_t* set);//将set集合中所有位初始化为1
+sigaddset(sigset_t* setint signo)//将set集合种某个信号的对应位设置为1
+sigdelset(sigset_t*set,int sino); //将set集合中某个信号的对应位设置为0
+bitcode = sigismember(sigset_t*set,int signo); //查看某个信号集种，对应信号的位码并直接返回0或1
+sigprocmask(SIG SETMASK,sigset_t* newset，&oldset): //可以替换进程信号集,并将原有的oldset传出保存，便于复位
+int how = SIG_SETMASK(替换覆盖)SIG_BLOCK(位或) SIG_UNBLOCK(取反求与)
 
 
