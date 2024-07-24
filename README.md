@@ -1481,5 +1481,187 @@ return 0;
 }
 ```
 这些行为只对当前进程生效
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<string.h>
+#include<signal.h>
 
- 
+void sig_do(int n)
+{
+int flag=2;
+while(flag--)
+{
+printf("flag %d\n",flag);
+sleep(1);
+}
+}
+
+//修改信号行为
+
+int main(void)
+{
+struct sigaction act,oact;
+act.sa_handler=sig_do;//捕捉行为
+act.sa_flags=0;
+sigemptyset(&act.sa_mask);
+sigaction(SIGINT,&act,&oact);//行为替换
+while(1)
+{
+sleep(1);
+}
+return 0;
+}
+```
+为了防止一个信号被捕捉时，下一个信号在上一个信号没处置完时被捕捉，系统会将屏蔽信号集对应的位置置为1
+[![20.png](https://i.postimg.cc/prLwPfXD/20.png)](https://postimg.cc/34zSBDGR)
+
+
+DUMP CORE
+信号的默认行为中有五种处理动作
+TERM CORE IGN STOP CONT
+重接杀死进程
+杀死进醒的同时，转储核心文件
+如果进程因为硬件异常被系统杀死，那么会(Dump core)，错误原因 xxx(核心已转储)
+
+```c
+oid err(void)
+{
+char str ="failed";
+str[0]='F';
+}
+int main(void)
+{
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+printf("Xsasdad\n");
+err();
+return 0;
+}
+```
+```linux
+ulimit -a//查看系统资源
+```
+信号回收
+wait() //阻塞回收(主动回收)
+waitpid()//非阻赛回收 (主动回收)
+信号回收 (被动回收方案)
+[![21.png](https://i.postimg.cc/vHKrykr0/21.png)](https://postimg.cc/mtQzNd69)
+捕捉函数执行流程
+[![22.png](https://i.postimg.cc/jdtLnbT8/22.png)](https://postimg.cc/7btxjjf7)
+ 问题：什么是用户层，什么是内核层
+ 答：CPU在完成不同任务下的不同权限（CPU在一些情况下会自封一部分权限去限制访问某些程序）
+一般main先执行 过程中产生信号，系统执行捕捉函数，捕捉函数先执行完，稍后回到主函数继续执行
+Level3，最低圾cpu权限，访问大部分系统设备都受限(用户层)
+level 0。最高吸cpu权限，可以访问所有设备和资源(内核吸)
+[![23.png](https://i.postimg.cc/vHrRRjSf/23.png)](https://postimg.cc/Tp3Ngkx3)
+
+
+关于捕捉函数的可重入不可重入问题
+全局安量inta=1024，此数据被捕提函数和主函数同时使用全局安量会引发不可重入问题
+全局链表关于insert问题
+使用全局资源或静态资源的函数成为不可重入函数，这种函数信号捕捉函数与主函数同时使用会引发异常
+可重入概念， 访问的数据也好， 函数也罢， 都不访问共享资源，不会引发冲突， 这种函数成为可重入函数，信号使用可重入内容是安全的 
+信号捕捉开发不允许使用不可重入内容
+满提函数和main函数都是使用全局链表的insert操作，必然引发内存泄规链表中的节点异常
+[![24.png](https://i.postimg.cc/Qx4Dhq90/24.png)](https://postimg.cc/hfd60T0d)
+时序竞态（）
+进程间通信
+sigqueue(pid\_t pid,int signo,struct union sigval val)////向任意进程发送任意信号并且携带自定义数据
+val.sival\_int =整数数据
+val.sival\_ptr =void \* 地址数据
+信号通信亲缘间使用比较简单,但是不相干的进程要想办法获取目标pid
+父进程关于子进程pid的问题，可以将pid存储在全局变量，便于捕捉函数使用，也可以使用getpid()+1,定位子进程
+[![25.png](https://i.postimg.cc/mgMmFD60/25.png)](https://postimg.cc/PCXWgtH4)
+
+```c
+#include<stdlib.h>
+#include<stdio.h>
+#include<unistd.h>
+#include<signal.h>
+#include<string.h>
+pid_t child_pid;
+void Parent_sig(int n,siginfo_t * info , void * arg)
+{
+//捕捉 SIGUSR2信号
+printf("Parent_pid [%d],%d\n",getpid(),info->si_int);//显示数据
+union sigval val;
+val.sival_int=++(info->si_int);
+sigqueue(child_pid,SIGUSR1,val);
+usleep(50000);
+}
+void Child_sig(int n ,siginfo_t * info , void * arg)
+{
+//捕捉 SIGUSR1信号
+printf("Child_pid [%d],%d\n",getpid(),info->si_int);//显示数据
+union sigval val;
+val.sival_int=++(info->si_int);
+sigqueue(getppid(),SIGUSR2,val);
+usleep(50000);
+}
+int main(void)
+{
+pid_t pid;
+//父进程捕捉设定，捕捉SIGUSR2信号
+struct sigaction act,oact;
+act.sa_sigaction = Parent_sig;
+act.sa_flags = SA_SIGINFO;
+sigemptyset(&act.sa_mask);
+sigaction(SIGUSR2,&act,&oact);
+//父进程屏蔽SIGUSR1，将屏蔽字继承给子是程
+sigset_t set,oset;
+sigemptyset(&set);
+sigaddset(&set,SIGUSR1);
+sigprocmask(SIG_SETMASK,&set,&oset);
+pid = fork();
+if(pid > 0)
+{
+//第一次信号发送(携带数据
+union sigval val;
+val.sival_int = 1;
+child_pid=pid;
+sigqueue(pid,SIGUSR1,val);
+while(1)
+sleep(1);//等待信号
+}
+else if(pid == 0)
+{
+//设置捕捉
+struct sigaction act,oact;
+act.sa_sigaction = Child_sig;
+act.sa_flags = SA_SIGINFO;
+sigemptyset(&act.sa_mask);
+sigaction(SIGUSR1,&act,&oact);
+//解除屏蔽
+sigprocmask(SIG_SETMASK,&act.sa_mask,NULL);
+//等待信号
+while(1)
+sleep(1);
+}
+else
+{
+perror("fork call failed");
+exit(0);
+}
+return 0;
+}
+```
+
+时序竞态（）
+alarm(10)定时进程，当定时到时，系统向定时进程发送SIGALRY信号
+CPU定时与进程无关
+SIGALRM信号默认的动作是TERM.会苏死目标进程，一定要让其失效
+pause 察觉信号涣醒，挂起过程中， 察觉到任意一个信号立即决醒，此信号必须要有处理动作这意味着，在定时到时前，如果有信号先于ALRM信号到达，pause会被误唤醒
+使用信号捕捉让信号失效，并且有处理流程。可以被pause察觉，捕捉函数空调用即可。设有附加功能
+
+
