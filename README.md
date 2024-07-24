@@ -1376,5 +1376,110 @@ sigdelset(sigset_t*set,int sino); //将set集合中某个信号的对应位设�
 bitcode = sigismember(sigset_t*set,int signo); //查看某个信号集种，对应信号的位码并直接返回0或1
 sigprocmask(SIG SETMASK,sigset_t* newset，&oldset): //可以替换进程信号集,并将原有的oldset传出保存，便于复位
 int how = SIG_SETMASK(替换覆盖)SIG_BLOCK(位或) SIG_UNBLOCK(取反求与)
+```c
+#include<stdio.b>
+#include<unistd.h>
+#include<string.h>
+#include<signal.h>
+int main(void)
+{
+sigset_t set,oset;
+sigemptyset(&set);//初始化 O
+sigaddset(&set,SIGINT);//设置屏蔽 SIGINT
+sigaddset(&set,SIGQUIT);//设置屏蔽 SIGQUIT
+sigaddset(&set,SIGKILL);//设置屏蔽 SIGKILL
+sigprocmask(SIG_SETMASK,&set,&oset);
+while(1)
+sleep(1);
+return 0;
+}
+```
+查看信号的屏蔽情况
+如果想查看信号的实时情况，需要看未决信号集
+信号已经被发出，递达进程，进程种被屏蔽，要观察这种已触发被屏蔽的信号只能查看未决信号集
+虽然未决信号集不能去写，但可以通过读来完成一些开发的应用
+获取进程的未决信号集， 而后输出未决的每一位， or 1，查看信号屏蔽
+sigpending(&pset); //调用此函数，系统将进程的未决信号集传出到pset中
+使用遍历循环结合sigismember,查看每一位的情况并输出
+```c
+#include<stdio.h>
+#include<unistd.h>
+#include<string.h>
+#include<signal.h>
+//查看信号的屏蔽情况，遍历打印来未决信号集
+void print_pest(sigset_t pest)
+{
+int i=1;
+for(i;i<32;i++)
+{
+if((sigismember(&pest,i)))
+{
+putchar('1);
+}
+else
+{
+putchar('0');
+}
+}
+putchar('\n');
+}
+int main(void)
+{
+sigset_t set,oset，pest;
+sigemptyset(&set);//初始化 O
+sigaddset(&set,SIGINT);//设置屏蔽 SIGINT
+sigaddset(&set,SIGQUIT);//设置屏蔽 SIGQUIT
+sigprocmask(SIG_SETMASK,&set,&oset);
+while(1)
+{
+sigpending(&pest);
+print_pest(pest);
+sleep(1);
+}
+return 0;
+}
+```
+信号行为修改
+struct sigaction act; //信号行为结构体
+act.sa\_handler = SIG\_DFL| SIG\_IGN|传递函数指针-> 自定义捕提函数o
+act.sa\_flags = 0 /此成员与行为接口定，如果使用a\_handler 那sa\_flags为0，如果使用sa\_sigaction,flags为SA\_SIGINFO
+act.sa\_mask//sigset\_t 信号集类型，为临时屏蔽字使用sigemptyset初始化
+sigaction(int signo,struct sigaciont \* newact,struct sigacion\* oldact);//替换进程的信号行为结构体，用newact替换，传出oldact(进程原有结构体）
+```c
 
 
+#include<stdio.h>
+#include<unistd.h>
+#include<string.h>
+#include<signal.h>
+
+//自定义捕捉函数
+//sa_handler=void(*sa_handler)(int)
+//sa handler是一个函数指针类型，但是捕捉函数定义必须与其一致
+void sig_do(int n)
+{
+//系统调用捕捉函数时，系统向n传捕捉的信号编号
+printf("SIGINT %d 捕捉成功 \n",n);
+}
+
+//修改信号行为
+
+int main(void)
+{
+struct sigaction act,oact;
+//act.sa_handler=SIG_DFL//默认行为
+//act.sa_handler=SIG_IGN//忽略行为
+act.sa_handler=sig_do;//捕捉行为
+act.sa_flags=0;
+sigemptyset(&act.sa_mask);
+sigaction(SIGINT,&act,&oact);//行为替换
+while(1)
+{
+sleep(1);
+}
+return 0;
+}
+```
+这些行为只对当前进程生效
+
+ 
