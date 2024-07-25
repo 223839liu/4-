@@ -1663,5 +1663,202 @@ CPU定时与进程无关
 SIGALRM信号默认的动作是TERM.会苏死目标进程，一定要让其失效
 pause 察觉信号涣醒，挂起过程中， 察觉到任意一个信号立即决醒，此信号必须要有处理动作这意味着，在定时到时前，如果有信号先于ALRM信号到达，pause会被误唤醒
 使用信号捕捉让信号失效，并且有处理流程。可以被pause察觉，捕捉函数空调用即可。设有附加功能
+```c
+void Pause(void)//执行立即挂起当前进程
+```
+[![26.png](https://i.postimg.cc/66Hdrfyg/26.png)](https://postimg.cc/23Zbmvd7)
+```c
+void sig_alarm(int n)
+{
+//null
+
+}
+unsigned int mysleep(unsigned int seconds)
+{
+unsigned int val;
+//捕捉设定
+//屏蔽SIGALRM
+sigset_t set,oset;//[14][1]
+sigemptyset(&set);
+sigaddset(&set,SIGALRM);
+sigprocmask(SIG_SETMASK,&set,&oset);//[14][1]
+struct sigaction act,oact;
+act.sa_handler = sig_alarm;
+act.sa_flags = 0;
+sigemptyset(&act.sa_mask);//
+sigaction(SIGALRM,&act,&oact);
+val = alarm(seconds);
+sleep(3);//----->在sleep期间,信号触发，处理SIGALRM信号
+//解除屏蔽同时挂起进程
+sigsuspend(&act.sa_mask);//[14][0]
+//这给时序问题提供一个解决方案，考虑原子方法，将关键步骤变为不可分调的原子操作，
+避免一些异常
+//pause();//挂起进程
+return val;
+}
+int main(void)
+{
+while(1)
+{
+printf("two seconds..\n");
+mysleep(2);
+}
+return 0;
+}
+```
+实现进程的外部控制
+[![28.png](https://i.postimg.cc/VNbrwFGS/28.png)](https://postimg.cc/XZ47c903)
+```c
+void sig_stop(int n)//捕捉sigusri信号
+{
+pause();
+}
+
+void sig_cont(int n)
+{
+//null
+
+}
+void server_sigaction(void)
+{
+struct sigaction act,bct,oact;
+act.sa_handler =sig_stop;
+act.sa_flags = 0;
+sigemptyset(&act.sa_mask);
+sigaction(SIGUSR1,&act,&oact);
+bct.sa_handler = sig_cont;
+bct.sa_flags = 0;
+sigemptyset(&bct.sa_mask);
+sigaction(SIGUSR2,&bct,NULL);
+}
+void out_pid(void)
+{
+int fd;
+char id[10];
+fd=open("server_config.conf",O_RDWR|O_CREAT,0664);
+pid_t pid=getpid();
+sprintf(id,"%d",pid);
+write(fd,id,strlen(id));
+close(fd);
+}
+int main(void)
+{
+server_sigaction();//捕捉设定
+out_pid();//抛出进程id到文件
+while(1)
+{
+//服务器主要业务
+printf("Server service Demo , version 0.0.1 , Listen epoll , Wait Client...\n");
+sleep(1);
+}
+}
+```
+```shell
+#!/bin/bash
+
+
+#echo $1 $2 $3
+PID=`cat server_config.conf`
+echo $PID
+
+if [ $1 = "stop" ]
+then kill -10 $PID
+elif [ $1 = "cont" ]
+then kill -12 $PID
+else print "Control Shell Failed\n"
+fi
+```
+关于阻塞函数和信号处理冲突
+阻塞函数处于等待状态，等待系统通知或事件消息
+[![29.png](https://i.postimg.cc/cC1MRMnL/29.png)](https://postimg.cc/0M3wxSnT)
+```c
+//信号引发的中断
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/fcntl.h>
+#include<pthread.h>
+#include<signal.h>
+#include<string.h>
+#include<errno.h>
+
+void sig_int(int n)
+{
+printf("成功捕捉SIGINT %d 信号\n",n);
+}
+int main(void)
+{
+int len;
+struct sigaction act,oact;
+act.sa_handler = sig_int;
+act.sa_flags = 0;
+sigemptyset(&act.sa_mask);
+sigaction(SIGINT,&act,&oact);
+char buf[1024];
+bzero(buf,sizeof(buf));
+tryagain:
+while((len = read(STDIN_FILENO,buf,sizeof(buf)))>0)
+{
+write(STDOUT_FILENO,buf,strlen(buf));
+bzero(buf,sizeof(buf));
+}
+if(len == -1)
+{
+if(errno == EINTR)
+{
+printf("read函数被强制中断，TryAgain..\n");
+goto tryagain;
+}
+}
+return 0;
+}
+```
+线程
+线程基础概述
+经典的并发模型多进程模型，占用大量的内存开销， 庞大的进程间调度开销，提供一种开销更小，更轻量的并发解决方案，多线程技术
+线程在进程中，与进程共享资源和数据，进程是容器，线程是执行单元，进程退出可能导致所有线程退出
+不支持线程技术的操作系统可以忽略线程概念，进程是调度单位
+多线程操作系统下， 进程是内存管理单位，线程才是唯一的调度单元
+线程就是寄存器和栈
+[![30.png](https://i.postimg.cc/tC5WrLNC/30.png)](https://postimg.cc/HVrrnvNf)
+多进程模型
+[![31.png](https://i.postimg.cc/SR4V9ckZ/31.png)](https://postimg.cc/R6Pc563f)
+多线程模型
+[![32.png](https://i.postimg.cc/3x0pKdHW/32.png)](https://postimg.cc/Jsmtx70W)
+线程的CPU分配
+Kernel\_Thread内核级线程
+操作系统中每创建一个线程，系统都会为其创建一个内核对象， 此线程系统可以识别支持，会为线程执行资源 (时间片)
+[![33.png](https://i.postimg.cc/1X0s7d5S/33.png)](https://postimg.cc/BPvrXMK7)
+用户级线程User\_Thread
+用户级线程，虽然系统不会主动分配资源，但系统线程放弃，通过就近原则，用户级线程就可以用到资源
+用户及线程，可以利用第三方库的形式在不支持线程技术的系统下安装和使用线程， 用户级线程的调度开销更小，因为大部分的操作都在用户层完成，无需内核干预
+[![34.png](https://i.postimg.cc/FRXCRK1Q/34.png)](https://postimg.cc/Mctm3qys)
+Linux操作系统下， 线程就是轻量级进程，每个进程分配一个LWP
+在linux操作系统下 所有的度单位都是进程，淡化线程概念
+进程的蜕化
+进程内存资源独占，不予其他人共享， 进程是独立的调度单位(无需考虑线程问题)
+讨论和分析的蜕化， 讨论线程，进程的讨论变为 主线程和普通线程的分析和讨论
+进程中出现了多个执行单元， 讨论考虑线程问题
+多线程在进程中的资源共享
+PCB是共享资源
+栈空间非共享，每个线程创建后，会分配8M线程栈
+库资源共享  信号的处理行为共享(某个线程改变信号行为)，对所有线程生效
+共享堆空间   信号屏蔽字非共享，普通线程据有独立的研藏字，拷贝继承于主线理
+全局资源共享  TCB非共享，每个线程据有独立的线程控制块，独立的tid
+代码段共享
+文件描述符共享
+信号行为共享
+线程开发相关的API接口
+NPTL线程库是典型的内核级线程库， 创建的线程可以被系统识别分配cpu资源(轻量级进程)(nativ Posix thread library)
+ps aux 进程查看 pa ajx 进程关系查看 ps -eLf所有线程查看 ps -Lf pid进程中线程查看
+每个线程都会被系统分配lwp 调度编号， 便于系统管理调度线程， 但是线程拥有独立的tid 线程id
+```c
+#include<pthread.h>
+pthread_t tid;//线程tid类型
+pthread_create(pthread_t * tid , NULL , void * (* thread_job)(void *) , void * arg)//线程创建并指定任务
+```
+
 
 
