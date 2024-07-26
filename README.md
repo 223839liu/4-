@@ -1857,8 +1857,146 @@ ps aux 进程查看 pa ajx 进程关系查看 ps -eLf所有线程查看 ps -Lf p
 ```c
 #include<pthread.h>
 pthread_t tid;//线程tid类型
-pthread_create(pthread_t * tid , NULL , void * (* thread_job)(void *) , void * arg)//线程创建并指定任务
+int err=pthread_create(pthread_t * tid , NULL , void * (* thread_job)(void *) , void * arg)//线程创建并指定任务
 ```
+关于线程函数的错误处理，线程函数会返回错误号(err > 0)，使用char\* errstr = strerror(err)
+调用线程时要保证进程存活
+在使用线程时都需要链接库（gcc 文件名 -l库名 -o app）
+```c
+void * thread_job(void * arg)//普通线程工作
+{
+printf("普通线程被创建，参数为 %d\n",*(int *)arg);
+return NULL;
+}
+int main(void)//主函数是全控线程的任务
+{
+pthread_t tid;
+int code = 1024;
+pthread_create(&tid,NULL,thread_job,(void*)&code);
+printf("主线程创建普通线程成功... \n");
+while(1)
+sleep(1);
+return 0;
+}
+```
+```c
+void * thread_job(void * arg)//普通线程工作
+{
+//printf("普通线程被创建，参数为 %d\n",*(int *)arg);
+while(1)
+sleep(1);
+return NULL;
+}
+int main(void)//主函数是全控线程的任务
+{
+pthread_t tid;
+int code = 1024;
+int flags=0;
+int err;
+while(1)
+{
+if((err=pthread_create(&tid,NULL,thread_job,(void*)&code))>0)
+{
+printf("pthread create call failed:%s\n",strerror(err));
+exit(0);//进程退出
+}
+printf("flags %d\n",++flags);
+}
+return 0;
+}
+```
+pthread\_t tid = pthread\_self(void); //成功返回当前线程tid
+主线程通过pthread\_reate 创建普通线程，成功传出td 与普通线程自身利用pthread\_self()得到的tid 值相等但是进程状态不相等，因为pthread\_self()获取tid时可以保证当前的有效性
+pthread\_join(pthread\_t tid,void \*\* reval): //线程回收函数，可以回收线程资源的同时获取线程的返回值 经典的阻塞回收函数，会一直等待曾通线程结束后，进行回收
+pthread\_cancel(pthread\_t tid)://指定线程tid. 取消结束线程
+void pthread\_testcancel(void)产生一次系统调用(一般配合pthread\_cancel使用)
+```c
+void * thread_job(void * arg)//普通线程工作
+{
+//printf("普通线程被创建，参数为 %d\n",*(int *)arg);
+while(1)
+{
+printf("普通线程Runing...\n");
+sleep(1);
+}
+return (void*)126;
+}
+int main(void)//主函数是全控线程的任务
+{
+pthread_t tid;
+int code = 1024;
+int flags=0;
+int err;
+void * reval=NULL;
+if((err=pthread_create(&tid,NULL,thread_job,(void*)&code))>0)
+{
+printf("pthread create call failed:%s\n",strerror(err));
+exit(0);//进程退出
+}
+printf("Mondter thread 0x%x,普通线程 id  0x%x\n",(unsigned int)pthread_self(),(unsigned int)tid);
+sleep(5);
+pthread_cancel(tid);
+//thread_join(tid,&reval);
+//printf("Mondter exit code %ld\n",(long int)reval);
+while(1)
+sleep(1);
+return 0;
+}
+```
+```c
+void * thread_job(void * arg)//普通线程工作
+{
+//printf("普通线程被创建，参数为 %d\n",*(int *)arg);
+while(1)
+{
+//printf("普通线程Runing...\n");
+//sleep(1);
+pthread_testcancel();
+}
+return (void*)126;
+}
+int main(void)//主函数是全控线程的任务
+{
+pthread_t tid;
+int code = 1024;
+int flags=0;
+int err;
+void * reval=NULL;
+if((err=pthread_create(&tid,NULL,thread_job,(void*)&code))>0)
+{
+printf("pthread create call failed:%s\n",strerror(err));
+exit(0);//进程退出
+}
+printf("Mondter thread 0x%x,普通线程 id  0x%x\n",(unsigned int)pthread_self(),(unsigned int)tid);
+sleep(5);
+pthread_cancel(tid);
+thread_join(tid,&reval);
+printf("Mondter exit code %ld\n",(long int)reval);
+while(1)
+sleep(1);
+return 0;
+}
+```
+线程指定退出码时不允许使用-1.保留给pthread\_caneel
+信号处理的三个切换条件，系统调用，软件中断， 软件异常
+cancel取消事件的处理条件，必须有系统调用
+[![35.png](https://i.postimg.cc/pTs9xwFH/35.png)](https://postimg.cc/S2zQftdT)
+//回首态线程，这种状态是线程的默认状态，这种线程结束后必须手动回收 pthread\_join
+//这种线程结来后系统自动回收线程资源，分离态线程，无需用户干预 
+修改线程调出状态，从回收态改为分离态， 此操作不可逆， 不能将分离线程变为回收
+如果对一个分离态线程进行回收操作， pthread\_join 会失败返回
+对一个已经处于回收阶段(join已经开始阻塞等待了)的线程设置分离，分离设置失败
+一个自行回收，一个系统回收， 一个可以得到线程退出码，一个无法获取
+```c
+pthread_detach(pthread_t tid);//将一个线程设置为分离态线程
+pthread_exit((void *)126); //线程退出函数， 结束当前线程， 与进程无关，退出码可以被join获取
+退出方式
+[![36.png](https://i.postimg.cc/J06PD7s4/36.png)](https://postimg.cc/jnfzBb6G)
+线程属性
+pthread\_create(&tid , pthread\_attr\_t * attr , thread\_job , NULL):
+pthread\_attr\_t attr: 线程属性类型
+[![37.png](https://i.postimg.cc/5N9jgrtF/37.png)](https://postimg.cc/4nMJNBVJ)
+
 
 
 
