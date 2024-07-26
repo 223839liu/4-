@@ -1990,11 +1990,14 @@ cancel取消事件的处理条件，必须有系统调用
 ```c
 pthread_detach(pthread_t tid);//将一个线程设置为分离态线程
 pthread_exit((void *)126); //线程退出函数， 结束当前线程， 与进程无关，退出码可以被join获取
+```
 退出方式
 [![36.png](https://i.postimg.cc/J06PD7s4/36.png)](https://postimg.cc/jnfzBb6G)
 线程属性
-pthread\_create(&tid , pthread\_attr\_t * attr , thread\_job , NULL):
-pthread\_attr\_t attr: 线程属性类型
+```c
+pthread_create(&tid , pthread_attr_t * attr , thread_job , NULL):
+pthread_attr_t attr: 线程属性类型
+```
 [![37.png](https://i.postimg.cc/5N9jgrtF/37.png)](https://postimg.cc/4nMJNBVJ)
 
 
