@@ -2000,6 +2000,273 @@ pthread_attr_t attr: 线程属性类型
 ```
 [![37.png](https://i.postimg.cc/5N9jgrtF/37.png)](https://postimg.cc/4nMJNBVJ)
 
+最后一个32位系统有
+线程栈的大小谨慎修改
+本段内容作为指引性介绍， 默认的线程属性可以满足绝大多数开发要求，只有及特殊情况可能修改属性
+1.定义线程属性
+2.初始化线程属性初始化后为默认属性
+3.修改线程属性
+pthread\_attr\_getstack(pthread\_attr\_t \* attr , void \*\* stntkaddr , size\_t \* statcksize)
+pthread\_attr\_setstack(pthread\_attr\_t \* attr , void \*\* stntkaddr , size\_t \* statcksize)
+如果要修改线程栈，需要自行申请栈空间 malloc
+pthread\_attr\_getdetachstate(pthread\_attr\_t \* attr ,int \* detachstaet)
+pthread\_attr\_setdetachstate(pthread\_attr\_t \* attr ,int \* detachstaet)
+detachstate有两个关键字一个是分离态PTHREAD\_CREATE\_JOIINABLE，一个是回收态PTHREAD\_CREATE\_DETACHED
+4.一定要用自定义属性创建线程
+5.属性适用完毕后释放内存pthread\_attr\_destery()
+``c
+int main (void)
+{
+int detachstate;
+void * stackaddr;
+size_t stacksize;
+pthread_attr_t attr;
+pthread_attr_init(&attr);
+//显示默认属性中的退出状态、栈地址、栈大小
+pthread_attr_getdetachstate(&attr,&detachstate);
+if(detachstate==PTHREAD_CREATE_JOINABLE)
+printf("attr exit_status its JOIN\n");
+else
+printf("attr exit_status its DETA\n");
+pthread_attr_destroy(&attr);
+}
+```
+```c
+void * thread_job(void * arg)
+{
+while(1)
+sleep(1);
+}
 
+int main (void)
+{
+int detachstate;
+void * stackaddr;
+size_t stacksize;
+pthread_attr_t attr;
+pthread_attr_init(&attr);
+//显示默认属性中的退出状态、栈地址、栈大小
+pthread_attr_getdetachstate(&attr,&detachstate);
+if(detachstate==PTHREAD_CREATE_JOINABLE)
+printf("attr exit_status its JOIN\n");
+else
+printf("attr exit_status its DETA\n");
+pthread_attr_getstack(&attr,&stackaddr,&stacksize);
+printf("attr stack_info=%p,size=%d\n",stackaddr,stacksize);
+//设置属性中退出状态，设置为分离，创建分离线程
+pthread_t tid;
+int err;
+pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED);
+pthread_create(&tid,&attr,thread_job ,NULL);
+pthread_join(tid,NULL);
+if((err=pthread_join(tid,NULL))>0)
+{
+printf("join failed:%s\n",strerror(err));
+exit(0);
+}
+pthread_attr_destroy(&attr);
+}
+```
+```c
+void * thread_job(void * arg)
+{
+while(1)
+sleep(1);
+}
+
+int main (void)
+{
+int detachstate;
+void * stackaddr;
+size_t stacksize;
+pthread_attr_t attr;
+pthread_attr_init(&attr);
+//显示默认属性中的退出状态、栈地址、栈大小
+pthread_attr_getdetachstate(&attr,&detachstate);
+if(detachstate==PTHREAD_CREATE_JOINABLE)
+printf("attr exit_status its JOIN\n");
+else
+printf("attr exit_status its DETA\n");
+pthread_attr_getstack(&attr,&stackaddr,&stacksize);
+printf("attr stack_info=%p,size=%d\n",stackaddr,(int)stacksize);
+//设置属性中退出状态，设置为分离，创建分离线程
+pthread_t tid;
+int err;
+pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED);
+//pthread_create(&tid,&attr,thread_job ,NULL);
+//pthread_join(tid,NULL);
+//if((err=pthread_join(tid,NULL))>0)
+//{
+//printf("join failed:%s\n",strerror(err));
+//exit(0);
+//}
+int flags=0;
+stacksize=0x100000;//1M
+while(1)
+{
+if((stackaddr=(void*)malloc(stacksize))==NULL)
+{
+perror("malloc thread stack failed");
+exit(0);
+}
+pthread_attr_setstack(&attr,stackaddr,stacksize);
+if((err=pthread_create(&tid,&attr,thread_job,NULL))>0)
+{
+printf("thread create failed:%s\n",strerror(err));
+exit(0);
+}
+printf("thread number %d\n",++flags);
+}
+pthread_attr_destroy(&attr);
+}
+```
+线程安全
+访问互斥
+多线程访问全局资源或静态资源，多线程访问文件数据,多线程适用共享数据引发异常
+```c
+int number;
+void * thread_job(void * arg)
+{
+pthread_detach(pthread_self());
+for(int i=0;i<5000;i++){
+printf("pthread 0x%x  ++number %d\n",(unsigned int)pthread_self(),++number);
+}
+pthread_exit(NULL);
+}
+
+int main (void)
+{
+pthread_t tid;
+pthread_create(&tid,NULL,thread_job,NULL);
+pthread_create(&tid,NULL,thread_job,NULL);
+while(1)
+{
+sleep(1);
+}
+return 0;
+}
+```
+互斥锁
+```c
+pthread_mutex_lock();//上锁操作
+pthread_mutex_unlock();//解锁操作
+```
+互斥锁避免多线程同时访问资源， 避免资源异常，结果异常
+```c
+pthread_mutex_t lock//互斥锁
+pthread_mutex_init(&lock,NULL)//互斥锁初始化
+pthread_mutex_destroy(&lock)//释放互斥锁
+pthread_mutex_lock(&lock)//申请锁
+pthread_mutex_trylock();//非阻塞申请，锁被占用不会阻塞，立即返回
+pthread_mutex_unlock(&lock)//释放锁
+```
+加锁的位置问题。 可能改变线理执行流程
+参考， 只有全局资源读写时需要上锁
+```c
+int number;
+pthread_mutex_t lock;
+void * thread_job(void * arg)
+{
+pthread_detach(pthread_self());
+int tmp;
+for(int i=0;i<5000;i++)
+{
+pthread_mutex_lock(&lock);
+tmp=number;
+printf("pthread 0x%x  ++number %d\n",(unsigned int)pthread_self(),++tmp);
+number=tmp;
+pthread_mutex_unlock(&lock);
+}
+pthread_exit(NULL);
+}
+
+int main (void)
+{
+pthread_t tid;
+pthread_create(&tid,NULL,thread_job,NULL);
+pthread_create(&tid,NULL,thread_job,NULL);
+while(1)
+{
+sleep(1);
+}
+pthread_mutexattr_destroy(&lock);
+return 0;
+}
+```
+惊群问题， 多线程争抢资源， 因资源有限， 来抢到的线程付出了无意义的系仇开销
+标记在某线程占用锁资源时自动分发
+就近原则，某个线程释放了锁立即申请， 它还会占用锁
+[![38.png](https://i.postimg.cc/d1HnJc6h/38.png)](https://postimg.cc/YGFQxVJ7)
+读写锁
+互斥锁不允许多个线程同时访问资源，资源的利用率较低，读写锁可以解决这个问题，它支持一个线程写资源，多个线程可以同时读资源提高资源利用率
+读共享，写独占，读写互斥锁
+```c
+pthread_rwlock_t lock //读写锁
+pthread_rwlock_init(&lock，NULL) //互斥锁初始化
+pthread_rwlock_destroy(&lock) //程放互斥锁
+pthread_rwlock_rdlock(&lock): //申请读锁
+pthread_rwlock_wrlock(&lock): //申请写锁
+pthread_rwlock_unlock(&lock): //释放锁
+旋转锁/自旋锁
+不会挂起等待锁， 一直重复请求，直到获取成功位置， 请求旋转锁的线程不会挂起， 一直处于运行态R
+```c
+int number;
+pthread_rwlock_t lock;
+void * thread_wr(void * arg)
+{
+while(1)
+{
+pthread_rwlock_wrlock(&lock);
+printf("write thread 0x%x ++number = %d\n",(unsigned int)pthread_self(),++number);
+pthread_rwlock_unlock(&lock);
+usleep(100000);
+}
+}
+void * thread_rd(void * arg)
+{
+while(1)
+{
+pthread_rwlock_rdlock(&lock);
+printf("read thread 0x%x number=%d\n",(unsigned int)pthread_self(),number);
+pthread_rwlock_unlock(&lock);
+usleep(100000);
+}
+}
+int main(void)
+{
+pthread_t tids[8];
+pthread_rwlock_init(&lock,NULL);
+int i;
+for(i=0;1<3;i++)
+{
+pthread_create(&tids[i],NULL,thread_wr,NULL);
+}
+for(i;i<8;i++)
+{
+pthread_create(&tids[i],NULL,thread_rd,NULL);
+}
+while(i--)
+pthread_join(tids[i],NULL);
+pthread_rwlock_destroy(&lock);
+exit(0);
+}
+```
+文件读写锁
+把写锁， n把读锁，读共享，写独占，读写互斥
+结构体名：struct flock
+//表示上锁方式，包含上读锁， 写锁和解锁，F_RDLCK F_WRLCK F_UNLCK
+[![39.png](https://i.postimg.cc/VsTShxVZ/39.png)](https://postimg.cc/14G5njPD)
+文件锁通过修改文件锁属性实现上锁和解锁效果
+//上锁的绝对位置，SEEK_SET，SEEK_CUR SEEK_END 
+//相对位置，是依据绝对位置描述的
+//可以直行填写上锁长度， 如果传0则锁整个文件
+//pid中存储当前占用文件锁的进程id
+文件锁通过修改文件锁属性实现上锁和解锁效果，用户需要自定义锁结构体并赋值，而后对文件默认锁结构进行替换，实现文件锁操作
+```c
+fcntl(fd,F_GETLK,struct * lock);//将文件默认的锁结构体传出到lock变量中
+fcntl(fd,F_SETLK,struct flock * newlock); //将自定义的newlock替换文件原有的结构体，实现上锁效果 F_SETLK是非阻塞上锁
+F_SETLKW //阻寨上锁关键字，如果文件锁被占用，则会挂起等待
+```
+```c
 
 
