@@ -2268,5 +2268,89 @@ fcntl(fd,F_SETLK,struct flock * newlock); //将自定义的newlock替换文件�
 F_SETLKW //阻寨上锁关键字，如果文件锁被占用，则会挂起等待
 ```
 ```c
+A:
+int main(void)
+{
+//判断文件锁属性，查看是否可以上锁
+struct flock old;
+int fd = open("pthread_test.c",O_RDWR);
+fcntl(fd,F_GETLK,&old);
+if(old.l_type == F_UNLCK)
+{
+printf("process A %d get flock successly .lock status its unlock.. \n",getpid());
+struct flock new;
+new.l_type = F_WRLCK;
+new.l_whence = SEEK_SET;
+new.l_start = 0;
+new.l_len = 0;
+fcntl(fd,F_SETLKW,&new);
+printf("process A %d Set wrtie lock successly..\n" ,getpid());
+sleep(10);
+new.l_type=F_UNLCK;
+fcntl(fd,F_SETLKW,&new);
+printf("process A %d Set wrtie unlock\n" ,getpid());
+}
+else
+printf("pthread test lock status is not unlock..\n");
+return 0;
+}
+
+B:
+int main(void)
+{
+//判断文件锁属性，查看是否可以上锁
+struct flock old;
+int fd = open("pthread_test.c",O_RDWR);
+struct flock new;
+new.l_type = F_WRLCK;
+new.l_whence = SEEK_SET;
+new.l_start = 0;
+new.l_len = 0;
+fcntl(fd,F_SETLKW,&new);
+printf("process B %d Set wrtie lock successly..\n" ,getpid());
+return 0;
+}
+```
+死锁问题
+锁资源有限，但多线程相互请求锁资源 导致线程永久阻塞， 这种现象成为死锁
+[![40.png](https://i.postimg.cc/bwjpRs4T/40.png)](https://postimg.cc/D859vyvJ)
+死锁发生的四个必要条件:
+请求与保持条件: 某个线程在占用一把锁后还要请求新锁， 容易引发死锁问题
+不可剥夺条件: 除了占用资源的线程外， 其他人无法解锁资源
+互斥条件: 某个线程占用锁资源后，其他线程申请则挂起等待
+环路等待条件: 每个线程都在等待相邻线程手中的资源， 这种成为等待环路死锁处理:
+产生死锁后，杀死死锁线程，解除死锁，而后再创建(死锁频繁，
+创建销毁线程开销较大)
+死锁检测:
+有向图检测
+广度优先遍历算法
+深度优先遍历算法
+可以通过图遍历算法检测出，图中是否出现环路，如果是则已发生死锁，可以通过杀死线程发的方式杀死某个节点，解除死锁
+死锁预防
+暂学家只有两种工作模式， 思考和进食
+思考不占用资源，进餐时每个哲学家先获取左手的筷子，再获取右手的筷子
+死锁现象:
+5名哲学家同时进餐，分别拿起左手的筷子，等待获取右手的筷子，产生死锁问题，永久挂起
+礼貌策略:
+当某个哲学家拿起左手的资源，发现无法获取右手的资源，它会放下左手资源，让其他人进餐
+活锁问题，如果哲学家同时频繁触发礼貌机制，导致所有哲学家拿起放下餐具， 无法进食，饿死
+高权级策略，选中一名哲学家提高权限，此哲学家要进餐时，向相邻哲学家发送通知，让其放下资源
+高权策略， 由于优先级转换， 可能导致多数时间，只有超级哲学家在进餐
+多线程情景下， 资源有限， 多线程合理的规避问题， 合理使用资源
+服务者模式，银行家算法
+银行家算法转资源都抽象为银行资产，每个用户借款银行进行借款风险评估，如果风险超出阈值，禁止放款
+[![41.png](https://i.postimg.cc/rw3Wg6Sc/41.png)](https://postimg.cc/w157TGfb)
+线程控制（条件变量）
+条件变量技术实现线程的挂起和唤醒
+为线程指定执行条件，按执行条件挂起唤醒控制线程
+pthread\_cond \_tcd //条件变量类型 ， 线程可以挂起在条件变量中，也可以从中唤醒
+pthread\_cond\_init(pthread\_cond\_t\* cd，NULL)://初始化条件变量
+pthread\_cond\_destroy(pthread\_eond\_t \* cd); //销毁释放条件变母
+pthread\_cond\_waitpthread\_cond\_t \* cd , pthread\_mutex\_t \* lock)
+两次执行
+线程第一次执行wait雨数，挂起钱程的同时解锁互斥锁
+
+
+
 
 
