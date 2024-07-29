@@ -2349,6 +2349,114 @@ pthread\_cond\_destroy(pthread\_eond\_t \* cd); //销毁释放条件变母
 pthread\_cond\_waitpthread\_cond\_t \* cd , pthread\_mutex\_t \* lock)
 两次执行
 线程第一次执行wait雨数，挂起钱程的同时解锁互斥锁
+pthread\_cond\_signal(pthread\_cond\_t\* cd); //唤醒一个挂起在cd中的线程
+pthread\_cond\_broadcast(pthread\_cond\_t \* cd); //唤醒所有起在cd中的线程
+signal函数的误唤醒， 如果系统是多核处理器cpu，signal函数可能映醒多个线程，导致误唤醒
+条件变量的数量取决于工作条件的数量
+[![42.png](https://i.postimg.cc/02MRjgLz/42.png)](https://postimg.cc/JGLdYF78)
+生产者消费者
+经典的数据传递或任务传递模型
+[![43.png](https://i.postimg.cc/rwWnQb5s/43.png)](https://postimg.cc/VJfWNKGP)
+```c
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<unistd.h>
+#include<pthread.h>
+
+pthread_mutex_t lock;
+pthread_cond_t Not_full;
+pthread_cond_t Not_Empty;
+
+typedef struct
+{
+int id;
+char desc[1024];
+}date_t;
+
+
+typedef struct
+{
+date_t * container; //队列
+int Front;
+int Rear;
+int Max;
+int Cur;
+}queue_t;
+
+queue_t * Queue_Create(int Max)
+{
+queue_t * ct=NULL;
+ct = (queue_t *)malloc(sizeof(queue_t));//申请队列结构体地>址
+ct->Front=0;
+ct->Rear =0;
+ct->Max =Max;
+ct->Cur=0;
+ct->container = (date_t *)malloc(sizeof(date_t)* Max); //申
+请队列地址
+return ct;
+}
+
+void * customer_thread(void * arg)
+{
+pthread_detach(pthread_self());
+queue_t * ct = (queue_t *)arg;
+date_t node;
+while(1) //持续从队伍中获取数据
+{
+pthread_mutex_lock(&lock);
+while(ct->Cur==0)
+{
+pthread_cond_wait(&Not_Empty,&lock);
+}
+node = ct->container[ct->Rear];
+printf("cutomer thread 0x%x Get Date Success, node.id %d node.desc %s\n",(unsigned int)pthread_self(),node.id,node.desc);
+--(ct->Cur);
+ct->Rear = (ct->Rear + 1)% ct->Max;
+pthread_mutex_unlock(&lock);
+pthread_cond_signal(&Not_full);
+}
+pthread_exit(NULL);
+}
+
+int main(void)
+{//主线程 生产者
+pthread_t tid[3];
+int i;
+date_t node;
+queue_t *ct = Queue_Create(100);
+if(pthread_mutex_init(&lock,NULL)!=0||pthread_cond_init(&Not_Empty,NULL)!=0||pthread_cond_init(&Not_full,NULL)!=0)
+{
+printf("init lock or cond Failed\n");
+exit(0);
+}
+for(i=0;i<3;i++)
+{
+pthread_create(&tid[i],NULL,customer_thread,(void *)ct);//>创建消费者
+}
+//生产者循环添加任务
+for(int i=0;i<20;i++)
+{
+node.id =i;
+bzero(node.desc,1024);
+sprintf(node.desc,"测试用任务数据信息%d",i);
+pthread_mutex_lock(&lock);
+ct->container[ct->Front]=node;
+ct->Front =(ct->Front + 1)% ct->Max;
+++(ct->Cur);
+pthread_mutex_unlock(&lock);
+pthread_cond_signal(&Not_Empty);
+printf("producer Thread 0x%x Add Task successly..\n",(unsigned int)pthread_self());
+}
+while(1)
+sleep(1);
+}
+```
+Socket套接字
+一般用于网络应用开发，系统提供的一套API函数接口，成为套接字函数， 网络应用开发是软件开发工程师必备技能
+everything its file，将所有的设备访问方式抽象为文件，可以通过文件描述符访问大多数linux设备
+[![44.png](https://i.postimg.cc/ZnwtWvYG/44.png)](https://postimg.cc/gLLB5JZs)
+int sockfd=socet(AF\_INET,SOCK\_STREAM,0) //成功返回sock\_fd，失败返回-1，errno被设置
 
 
 
