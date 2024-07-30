@@ -2457,6 +2457,141 @@ Socket套接字
 everything its file，将所有的设备访问方式抽象为文件，可以通过文件描述符访问大多数linux设备
 [![44.png](https://i.postimg.cc/ZnwtWvYG/44.png)](https://postimg.cc/gLLB5JZs)
 int sockfd=socet(AF\_INET,SOCK\_STREAM,0) //成功返回sock\_fd，失败返回-1，errno被设置
+绑定可以对socket设置自定义的ip和端口号，其次当绑定某端口的进程退出，可以临时禁用端口号,时长为2MSL
+struct sockaddr in addr //网络信息结构体类型
+addr.sin\_family = AF\_INET
+addr.sin\_port = 大端(8080)
+addr.sin\_addr.s\_addr = 大端(ip)
+bind(sock fd，struct sockaddr \* addr , socklen\_t addrlen): //成功返回0失败返回-1
+listen(int sockfd , int backlog)
+backlog默认大小是128
+htons() 小端转大端端口
+htonl() 小端转大端IP
+ntohs() 大端转小端端口
+inet\_pton(AF\_INET , char \* ip , void \* addr)
+inet\_ntop(AF\_INET , void \* addr , char \* ip ,16 )
+ntohl0) 大端转小端IP
+connect(int sockfd, struct sockaddr \* dest , socklen\_t addrlen); //请求链接函数，成功返回0失败返回-1
+int Csockfd = accept(int sockfd , struct sockaddr \* addr, socklen\_t \* addrlen ) //成功返回sockfd ,失败返回-1
+adrrlen 传入传出参数，传入可接收的结构体大小，成功后传出实际大小
+ssize\_t recv(int sockfd , void \* buf , size\_t size , int flag) MSG\_DONTWAIT , 成功返回读取的数据量,失败返回-1
+ssize\_t send(int sockfd , void \* buf , size\_t size , int flag)(避免信号杀死)
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.hx
+#include <arpa/inet.h>
+#include <unistd.h>
+#define SERVER_PORT 8080
+#define SERVER_IP "42.193.104.238"
+#define BACKLOG 128
+#define TIMEOUT 2
+#define BUFSIZE 1508
+#define IPSIZE 16
+#define SHUTDOWN 1
+/* 测试demo ，支持基本tcp链接，用户链接成功后，向用户发送服务器的反馈信息 */
+int main(void)
+{
+int server_fd,client_fd;
+struct sockaddr_in serverAddr,clientAddr;
+bzero(&serverAddr,sizeof(serverAddr));
+serverAddr.sin_family = AF_INET;
+serverAddr.sin_port = htons(SERVER_PORT);
+serverAddr.sin addr.s_addr = htonl(INADDR_ANY);
+//socket create
+if((server_fd = socket(AF_INET,SOCKSTREAM,0))==-1)
+{
+perror("sock create failed");
+exit(0);
+}
+if((bind(server_fd,(struct sockaddr *)&serverAddr,sizeof(serverAddr)))==-1)
+{
+perror("bind call failed");
+exit(0);
+}
+if((listen(server_fd,BACKLOG))==-1)
+{
+perror("listen call failed");
+exit(0);
+}
+socklen_t addrlen;
+char client_ip[IPSIZE];
+char response[4096];
+bzero(client_ip,sizeof(client_ip));
+bzero(response,sizeof(response));
+while(SHUTDOWN)
+{
+addrlen = sizeof(clientAddr); //每次接前重新初始化addrlen ，避免因传出的信息长度导致连接异常
+if((client_fd = accept(server_fd,(struct sockaddr *)&clientAddr,&addrlen))=-1) //阻察等待连按
+{
+perror("accept call failed");
+exit(0);
+}
+//显示用户信息
+printf("client Connection Success, ip %s , port %d\n",inet_ntop(AF_INET,&clientAddr.sin_addr.s_addr,client_ip,IPSIZE),ntohs(clientAddr.sin_port));
+sprintf(response,"hi , <%s> wellcome test tcp server service..\n",client_ip);
+send(client_fd,response,strlen(response),0);//向用户发送反馈信息
+bzero(response,sizeof(response));
+close(client_fd);//反馈完毕立即断开
+close(server_fd);
+return 0;
+}
+
+#include<stdio.h>
+#includ<sunistd.h>
+#include<stdlib.h>
+#include<string.h>
+#include<sys/types .h>
+#include<sys/stat .h>
+#include<sys/fcntl .h>
+#include<pthread . h>
+#include<signal .h>
+#include<arpa/inet .h>
+#include<sys/socket.h>
+define SIP"42.193.104.238"
+define SPORT 8080
+int main(void)
+{
+struct sockaddr_in destAddr;
+destAddr.sin family = AF_INET;
+inet pton(AF_INET,SIP,SdestAddr.sin_addr.s_addr);
+destAddr.sin_port = htons(SPORT);
+int sockfd;
+sockfd = socket(AF_INET,SOCK_STREAM,0):
+if((connect(sockfd,(struct sockaddr *)6destAddr,sizeof(destAddr)))==-1)
+{
+perror("connect call failed");
+exit(o);
+}
+char buf[1500];
+bzero(buf,sizeof(buf)):
+recv(sockfd, buf,sizeof(buf) ,0) ;
+printf("%s"buf);
+close(sockfd);
+return 0;
+}
+```
+服务器
+服务器是经典的后台服务软件，各个互联网公司与产品都需要后台服务器进行支持，提供业务支持,数据支持等等，服务后台相关领域提供大量的就业岗位，服务器概念也是互联网不可或缺的一部分
+每次用户断开， 都需要重连操作， 提交最新网络信息
+可以设计keep-alive心跳机制保证用户的有效性
+[![45.png](https://i.postimg.cc/y8Fjq7Z2/45.png)](https://postimg.cc/gx288F4K)
+1.服务器操作系统
+Unix，Linux，Windows Server,在服务器基础系统领域， Linux和unix还是独占较大的时长份额的
+2.开源服务器 Apache ，Nginx，tomcate 经典的Web服务器，用于网页网站的后台支持
+3集群念/分布结构
+分布式概念是一种硬件的横向扩展策略，可以提高集群主机的物理性能，分布式策略可以通过socket技术将各种设备连接起来，统一调度，资源管理，资源共享
+[![46.png](https://i.postimg.cc/T1gDpMDB/46.png)](https://postimg.cc/n9VzPWT1)
+4.APUE经典的几种服务器软件开发模式
+1.单进程服务器(本章节样例)
+2.多进程并发模型
+3.多线程并发模型
+4.10复用模型
+5.EPOLL+线程池模型
+6.反应堆模型(reactor)
+
+
 
 
 
