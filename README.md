@@ -2684,7 +2684,147 @@ return 0;
 [![47.png](https://i.postimg.cc/Vs3sKd2B/47.png)](https://postimg.cc/K4DyzvGR)
 ```c
 process_server.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.hx
+#include <arpa/inet.h>
+#include <unistd.h>
+#include<ctype.h>
+#include<sys/wait.h>
+#define SERVER_PORT 8080
+#define SERVER_IP "42.193.104.238"
+#define BACKLOG 128
+#define TIMEOUT 2
+#define BUFSIZE 1508
+#define IPSIZE 16
+#define SHUTDOWN 1
+/* 测试demo ，支持基本tcp链接，用户链接成功后，向用户发送服务器的反馈信息 */
+字符简易处理， 小写转大写*/
+/* 用户发送localtime字段，服务器反馈最新网络时间 */
+void sig_wait(int n)
+{
+//捕捉了一个信号回收多次僵尸
+pid_t wpid;
+while((wpid = waitpid(-1,NULL,WNOHANG))>0)
+{
+printf("wait thread 0x%x , zombie porcess pid %d\n",(unsigned int)pthread_self(),wpid);
+}
+}
+void * thread_wait(void * arg)
+{
+pthread_detach(pthread_self());
+ struct sigaction act,oact;
+act.sa_handler = sig wait;
+act.sa_flags = 0;
+sigemptyset(&act.sa mask);
+sigaction(SIGCHLD,&act,&oact);
+//解除屏敲
+sigprocmask(SIG_SETMASK,&act.sa_mask,NULL);
+printf("wait thread 0x%x wait sigpal..\n”,(unsigned int)pthread_self());
+while(1)
+sleep(1);
+pthread exit(NuLL);
+exit(0);
+}
 
+int main(void)
+{
+int server_fd,client_fd;
+struct sockaddr_in serverAddr,clientAddr;
+pthread_t pid;
+//设置屏蔽，屏蔽SIGCHLD信号
+sigset_t set,oset;
+sigemptyset(&set);
+sigaddset(&set,SIGCHLD);
+sigprocmask(SIG_SETMASK,&set,&oset);
+//创建回收线程 
+pthread_create(&tid,NULL,thread_wait,NULL);
+bzero(&serverAddr,sizeof(serverAddr));
+serverAddr.sin_family = AF_INET;
+serverAddr.sin_port = htons(SERVER_PORT);
+serverAddr.sin addr.s_addr = htonl(INADDR_ANY);
+pid_t pid;
+//socket create
+if((server_fd = socket(AF_INET,SOCKSTREAM,0))==-1)
+{
+perror("sock create failed");
+exit(0);
+}
+if((bind(server_fd,(struct sockaddr *)&serverAddr,sizeof(serverAddr)))==-1)
+{
+perror("bind call failed");
+exit(0);
+}
+if((listen(server_fd,BACKLOG))==-1)
+{
+perror("listen call failed");
+exit(0);
+}
+socklen_t addrlen;
+char client_ip[IPSIZE];
+char response[4096];
+int recvlen;
+time_t tp;
+char time_buf[1024];
+int toupper_flag;//转换数量
+bzero(client_ip,sizeof(client_ip));
+bzero(response,sizeof(response));
+while(SHUTDOWN)
+{
+addrlen = sizeof(clientAddr); //每次接前重新初始化addrlen ，避免因传出的信息长度导致连接异常
+if((client_fd = accept(server_fd,(struct sockaddr *)&clientAddr,&addrlen))=-1) //阻察等待连按
+{
+perror("accept call failed");
+exit(0);
+}
+pid =fork();
+if(pid>0)
+{
+//显示用户信息
+printf("client Connection Success, ip %s , port %d\n",inet_ntop(AF_INET,&clientAddr.sin_addr.s_addr,client_ip,IPSIZE),ntohs(clientAddr.sin_port));
+sprintf(response,"hi , <%s> wellcome test tcp server service..\n",client_ip);
+send(client_fd,response,strlen(response),0);//向用户发送反馈信息
+}
+else if(pid==0)
+{
+//读取用户请求，如果用户发送的是普通小写字符字符串， 转换为大写，如果用户发送的是local关键字，响应时间
+bzero(response,sizeof(response));
+//持续响应，循环读写
+while((recvlen = recv(client_fd,response,sizeof(response),0))>0)
+{
+if(strcmp(response,"localtime\n")==0)
+{
+tp = time(NULL);//获取时间种子
+ctime_r(&tp,time buf);
+send(client_fd,time_buf,strlen(time_buf));//反馈时间
+}
+toupper_flag = 0;
+while(recvlen > toupper_flag)
+{
+response[toupper_flag] = toupper(response[toupper_flag]);
+toupper_flag++;
+}
+send(client_fd,response,recvlen);//发送反馈
+}
+if(recvlen = 0)
+{
+printf("user exit , child, process %d ,exiting..\n",getpid());
+exit(0);
+}
+}
+else
+{
+perror("fork call failed");
+exit(0);
+}
+close(client_fd);//反馈完毕立即断开
+close(server_fd);
+return 0;
+} 
+```
+3.多线程并发模型
+ 
 
 
 
