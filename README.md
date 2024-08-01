@@ -2824,8 +2824,409 @@ return 0;
 } 
 ```
 3.多线程并发模型
- 
+```c
+thread_server.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.hx
+#include <arpa/inet.h>
+#include <unistd.h>
+#include<ctype.h>
+#include<sys/wait.h>
+#define SERVER_PORT 8080
+#define SERVER_IP "42.193.104.238"
+#define BACKLOG 128
+#define TIMEOUT 2
+#define BUFSIZE 1508
+#define IPSIZE 16
+#define SHUTDOWN 1
+void * thread(void * arg)//处理线程完成与用户的数据处理
+{
+//读取用户请求，如果用户发送的是普通小写字符字符串， 转换为大写，如果用户发送的是local关键字，响应时间
+char response[1500];
+cahr time_buf[1024];
+int recvlen;
+time_t tp;
+int toupper_flag;
+bzero(response,sizeof(response));
+bzero(time_buf,sizeof(time_buf));
+//持续响应，循环读写
+pthread_detach(pthread_self());
+while((recvlen = recv(*(int *)arg,response,sizeof(response),0))>0)
+{
+if(strcmp(response,"localtime\n")==0)
+{
+tp = time(NULL);//获取时间种子
+ctime_r(&tp,time buf);
+send(*(int *)arg,time_buf,strlen(time_buf));//反馈时间
+}
+toupper_flag = 0;
+while(recvlen > toupper_flag)
+{
+response[toupper_flag] = toupper(response[toupper_flag]);
+toupper_flag++;
+}
+send(*(int *)arg,response,recvlen);//发送反馈
+}
+if(recvlen = 0)
+{
+printf("user exit,thread 0x%x,exitig...\n",(unsigned int)pthread_self());
+close(*(int *)arg);
+exit(0);
+}
+pthread exit(NuLL);
+}
 
+int main(void)
+{
+int server_fd,client_fd;
+struct sockaddr_in serverAddr,clientAddr;
+pthread_t pid;
+bzero(&serverAddr,sizeof(serverAddr));
+serverAddr.sin_family = AF_INET;
+serverAddr.sin_port = htons(SERVER_PORT);
+serverAddr.sin addr.s_addr = htonl(INADDR_ANY);
+pid_t pid;
+//socket create
+if((server_fd = socket(AF_INET,SOCKSTREAM,0))==-1)
+{
+perror("sock create failed");
+exit(0);
+}
+if((bind(server_fd,(struct sockaddr *)&serverAddr,sizeof(serverAddr)))==-1)
+{
+perror("bind call failed");
+exit(0);
+}
+if((listen(server_fd,BACKLOG))==-1)
+{
+perror("listen call failed");
+exit(0);
+}
+socklen_t addrlen;
+char client_ip[IPSIZE];
+char response[4096];
+int recvlen;
+time_t tp;
+char time_buf[1024];
+int toupper_flag;//转换数量
+bzero(client_ip,sizeof(client_ip));
+bzero(response,sizeof(response));
+while(SHUTDOWN)
+{
+addrlen = sizeof(clientAddr); //每次接前重新初始化addrlen ，避免因传出的信息长度导致连接异常
+if((client_fd = accept(server_fd,(struct sockaddr *)&clientAddr,&addrlen))=-1) //阻察等待连按
+{
+perror("accept call failed");
+exit(0);
+}
+//显示用户信息
+printf("client Connection Success, ip %s , port %d\n",inet_ntop(AF_INET,&clientAddr.sin_addr.s_addr,client_ip,IPSIZE),ntohs(clientAddr.sin_port));
+sprintf(response,"hi , <%s> wellcome test tcp server service..\n",client_ip);
+send(client_fd,response,strlen(response),0);//向用户发送反馈信息
+pthread _create(&tid,NULL,thread,(void *)&client_fd);
+}
+close(server_fd);
+return 0;
+} 
+```
+线程里不允许使用socket传地址，只允许使用值传递，防止覆盖
+```c
+改进版：
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.hx
+#include <arpa/inet.h>
+#include <unistd.h>
+#include<ctype.h>
+#include<sys/wait.h>
+#define SERVER_PORT 8080
+#define SERVER_IP "42.193.104.238"
+#define BACKLOG 128
+#define TIMEOUT 2
+#define BUFSIZE 1508
+#define IPSIZE 16
+#define SHUTDOWN 1
+void * thread(void * arg)//处理线程完成与用户的数据处理
+{
+//读取用户请求，如果用户发送的是普通小写字符字符串， 转换为大写，如果用户发送的是local关键字，响应时间
+char response[1500];
+cahr time_buf[1024];
+int recvlen;
+time_t tp;
+int toupper_flag;
+int client_fd=*(int *)arg;
+bzero(response,sizeof(response));
+bzero(time_buf,sizeof(time_buf));
+//持续响应，循环读写
+pthread_detach(pthread_self());
+while((recvlen = recv(client_fd,response,sizeof(response),0))>0)
+{
+if(strcmp(response,"localtime\n")==0)
+{
+tp = time(NULL);//获取时间种子
+ctime_r(&tp,time buf);
+send(client_fd,time_buf,strlen(time_buf));//反馈时间
+}
+toupper_flag = 0;
+while(recvlen > toupper_flag)
+{
+response[toupper_flag] = toupper(response[toupper_flag]);
+toupper_flag++;
+}
+send(client_fd,response,recvlen);//发送反馈
+}
+if(recvlen = 0)
+{
+printf("user exit,thread 0x%x,exitig...\n",(unsigned int)pthread_self());
+close(client_fd);
+exit(0);
+}
+pthread exit(NuLL);
+}
+
+int main(void)
+{
+int server_fd,client_fd;
+struct sockaddr_in serverAddr,clientAddr;
+pthread_t pid;
+bzero(&serverAddr,sizeof(serverAddr));
+serverAddr.sin_family = AF_INET;
+serverAddr.sin_port = htons(SERVER_PORT);
+serverAddr.sin addr.s_addr = htonl(INADDR_ANY);
+pid_t pid;
+//socket create
+if((server_fd = socket(AF_INET,SOCKSTREAM,0))==-1)
+{
+perror("sock create failed");
+exit(0);
+}
+if((bind(server_fd,(struct sockaddr *)&serverAddr,sizeof(serverAddr)))==-1)
+{
+perror("bind call failed");
+exit(0);
+}
+if((listen(server_fd,BACKLOG))==-1)
+{
+perror("listen call failed");
+exit(0);
+}
+socklen_t addrlen;
+char client_ip[IPSIZE];
+char response[4096];
+int recvlen;
+time_t tp;
+char time_buf[1024];
+int toupper_flag;//转换数量
+bzero(client_ip,sizeof(client_ip));
+bzero(response,sizeof(response));
+while(SHUTDOWN)
+{
+addrlen = sizeof(clientAddr); //每次接前重新初始化addrlen ，避免因传出的信息长度导致连接异常
+if((client_fd = accept(server_fd,(struct sockaddr *)&clientAddr,&addrlen))=-1) //阻察等待连按
+{
+perror("accept call failed");
+exit(0);
+}
+//显示用户信息
+printf("client Connection Success, ip %s , port %d\n",inet_ntop(AF_INET,&clientAddr.sin_addr.s_addr,client_ip,IPSIZE),ntohs(clientAddr.sin_port));
+sprintf(response,"hi , <%s> wellcome test tcp server service..\n",client_ip);
+send(client_fd,response,strlen(response),0);//向用户发送反馈信息
+pthread _create(&tid,NULL,thread,(void *)&client_fd);
+}
+close(server_fd);
+return 0;
+}
+```
+线程创建后， 接收socket值数据， 不允许直接使用地址数据
+4.10复用模型
+关于recv和accept工作流程
+[![48.png](https://i.postimg.cc/sft1g6sB/48.png)](https://postimg.cc/Lh3myVqR)
+?监听到socket事件就绪后，直接调用accept或recv即可，直接完成tcp连接或者数据读取，两个函数不会阻塞
+[![49.png](https://i.postimg.cc/PJFWCmfX/49.png)](https://postimg.cc/Fk3dqkJ8)
+[![50.png](https://i.postimg.cc/hvH0C9kC/50.png)](https://postimg.cc/N2kTFrfT)
+可以实现单进程一对多效果， 但是没有使用并发技术
+处现的业务复杂度不能过高，要在极短的事件内处理若干任务，投入第二次监听
+io复用模型又叫多路io转接，可以同时监听多个socket网络事件的模型
+1). select
+select 模型监听的最大数量为1024
+fd\_set set; //监听集合类型
+文件描述符与监听集合有对应关系。基础描述符占用监听位。导致select监听集合中最大只能监听1021个用户socket
+FD\_ZERO(fd\_set \* ser); //将监听集合初始化为0
+FD\_SET(int\_ockfd.fd\_set\* set)；//对set集金中 sockfd对应的位码设置为1
+FD\_CLER(int\_sockfd,fd\_set\* set)； //对set集合中，sockfd对应位码设置为0
+int bitcode = FD\_ISSET(int sockfd, fd set \* set): //查sockfd在监听合set中是1或是0 并直接返回
+int ready=select(maxfd+1,&sete,NULL,NULL,NULL);
+maxfd最大监听数，为进程最大描述符+1
+struct timeval val; //时间结构体
+timeval \* val = NULL //阻赛监听
+定义时间结构体初始化为0 ， 传入，则表达式非阻塞工作
+定义时间结构体，设置固定时长，实现定时阻塞
+[![51.png](https://i.postimg.cc/fRx69vpT/51.png)](https://postimg.cc/qNvbf2p9)
+[![52.png](https://i.postimg.cc/SQfBk2xz/52.png)](https://postimg.cc/c669cJYs)
+```c
+server_tcp:
+#include<stdio.h>
+#include<unistd.h>
+#include<string.h>
+#include<sys/socket.h>
+#include<arpa/inet.h>
+#include<stdlib.h> 
+#include<time.h>
+int Shutdown = 1;
+int client_array[1020];//存储客户端socket
+int socket_init(void);//返回 socket
+int return_responde(int clientfd, const char* clientip);
+int return_responde(int clientfd, const char* clientip)
+{
+	char response[4096];
+	bzero(response, sizeof(response));
+		sprintf(response, "hi %s wellcome test TCP server!\n", clientip);
+	send(clientfd, response, strlen(response), 0);
+		return 0;
+}
+int socket_init(void)
+{
+	int sockfd;
+	struct sockaddr_in sockaddr;
+	bzero(&sockaddr, sizeof(sockaddr));
+	sockaddr.sin_family = AF_INET;
+	sockaddr.sin_port = htons(8080);
+	sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	{
+		perror("socket call failed");
+		exit(0);
+	}
+	if ((bind(sockfd, (struct sockaddr*)&sockaddr, sizeof(sockaddr))) == -1)
+	{
+		perror("bind call failed");
+		exit(0);
+	}
+	listen(sockfd, 128);
+	return sockfd;
+}
+
+int main(void)
+{
+	int serverfd, maxfd,clientfd;
+	int ready;
+	struct sockaddr_in clientaddr;
+	socklen_t addrlen;
+	int recvlen;
+	char recv_buf[1500];
+	char client_ip[16];
+	time_t tp;
+	char time_buf[1024];
+	bzero(time_buf, sizeof(time_buf));
+	fd_set set, oset;//传入传出分离
+	bzero(recv_buf, sizeof(recv_buf));
+	bzero(client_ip, sizeof(client_ip));
+	serverfd = socket_init();
+	FD_SET(serverfd, &set);//放置监听
+	for (int i = 0; i < 1020; i++)
+		client_array[i] = -1;
+	//maxfd
+	maxfd = serverfd;
+	printf("Testing select server sevice Runing. .\n");
+	while (Shutdown)
+	{
+		oset = set;
+		if ((ready = select(maxfd + 1, &oset, NULL, NULL, NULL)) == -1)//阻塞监听事件
+		{
+		perror("select call failed");
+		exit(0);
+		}
+			while (ready)
+			{
+				//辨别就绪
+				if (FD_ISSET(serverfd, &oset))
+				{
+					addrlen = sizeof(clientaddr);
+					if ((clientfd = accept(serverfd, (struct sockaddr*)&clientaddr, &addrlen)) == -1)
+					{
+						perror("accept call failed");
+						exit(0);
+					}
+					inet_ntop(AF_INET, &clientaddr.sin_addr.s_addr, client_ip, 16);
+					printf("Listen server socket success, call accept, client_ip %s client prot %d\n",client_ip,ntohs(clientaddr.sin_port));
+					return_responde(clientfd, client_ip);
+					if (maxfd < clientfd)
+						maxfd = clientfd;
+					for (int i = 0; i < 1020; i++)
+						if (client_array[i] == -1)
+						{
+							client_array[i] = clientfd;
+							break;
+						}
+					FD_SET(clientfd, &set);//新socket设置监听
+				}
+				else
+				{
+					//仅处理一次客户端请求,单进程不允许客户端持续占用
+					for (int i = 0; i < 1020; i++)
+					{
+						if (client_array[i] != -1)
+							if (FD_ISSET(client_array[i], &oset))
+							{
+								if ((recvlen = recv(client_array[i], recv_buf, sizeof(recv_buf), 0)) > 0)
+								{
+									if (strcmp(recv_buf, "localtime\n") ==0)
+									{
+										tp = time(NULL);
+										ctime_r(&tp, time_buf);
+										send(client_array[i], time_buf, strlen(time_buf), 0);
+										bzero(time_buf, sizeof(time_buf));
+									}
+									else
+									{
+										send(client_array[i], "Please Try Again..\n", 20, 0);
+									}
+								}
+
+								else if (recvlen == 0)
+								{
+									FD_CLR(client_array[i], &set);//删除监听
+									close(client_array[i]);
+									client_array[i] = -1;
+									printf("User ex iting,delte this listen item,\n");
+								}
+							}
+					}
+				}
+				--ready;
+			}
+	}
+	printf("server doen..\n");
+	close(serverfd);
+	return 0;
+}
+```
+select 模型利弊
+优：
+1.可以通过简单的代码实现一对多效果， 比较轻量
+2.select模型拥有何强的兼容性，各个平台和语言都有实现
+3.支持微秒级别的定时阻塞监听，如果对时间精度有需求，select可以满足
+4.较为适合监听数量较小(局域网)等场景
+缺：
+1.监听数量较小，最大只能监听1024,无法满足 高并发需求
+2.轮询问题， 随着轮询数量的增长， IO处理性能呈线性下降
+3.用户需要对传出传出监听集合进行分离设置
+4. select只返回就绪的数量，没有反馈就绪的socket，需要用户自行遍历查找开销较大
+5.select可以监听的事件数量较少，select设置监听是批处理以集合为单位的,无法对不同的socket 设置不同的事件监听
+6.select 多轮使用会出现大量重复的拷贝开销和挂载监听开销
+[![53.png](https://i.postimg.cc/PrkwDrZh/53.png)](https://postimg.cc/RqXh5mXb)
+2poll模型
+poll模型允许用户自定义长度数组，作为监听集合，每个元素都是 struct pollfd node
+struct pollfd listen array[100000]; //自定义长度
+struct pollfd node; 可以用poll的监听数组存储所有客户端socket
+node.fd = sockfd //存储监听的socket，取消监听设置-1
+node.events = POLLIN|POLLOUT|POLLERR //设置要监听的socket事件
+node.revents = POLLIN //当socket就绪后，传出就绪事件，后续使用revents判断socket就绪
+int ready = poll(listen\_array , int\_nfds , int\_timeout ); timeout(-1阻塞)(>0 定时阻塞) (0 非阻塞)
+//poll默认阻塞监听，监听到就绪后返回就绪的数量， 用户处理就绪即可
 
 
 
