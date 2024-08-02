@@ -3227,8 +3227,148 @@ node.events = POLLIN|POLLOUT|POLLERR //设置要监听的socket事件
 node.revents = POLLIN //当socket就绪后，传出就绪事件，后续使用revents判断socket就绪
 int ready = poll(listen\_array , int\_nfds , int\_timeout ); timeout(-1阻塞)(>0 定时阻塞) (0 非阻塞)
 //poll默认阻塞监听，监听到就绪后返回就绪的数量， 用户处理就绪即可
+```c
+poll:
+#include<stdio.h>
+#include<unistd.h>
+#include<string.h>
+#include<sys/socket.h>
+#include<arpa/inet.h>
+#include<stdlib.h>
+#include<time.h>
+#include<poll.h>
+#include<sys/select.h>
+int Shutdown = 1;
+struct pollfd client_array[10000];//即是监听集合又是socket数组
+int socket_init(void);//返回 socket
+int return_responde(int clientfd, const char* clientip);
+int return_responde(int clientfd, const char* clientip)
+{
+	char response[4096];
+	bzero(response, sizeof(response));
+	sprintf(response, "hi %s wellcome test TCP server!\n", clientip);
+	send(clientfd, response, strlen(response), 0);
+	return 0;
+}
+int socket_init(void)
+{
+	int sockfd;
+	struct sockaddr_in sockaddr;
+	bzero(&sockaddr, sizeof(sockaddr));
+	sockaddr.sin_family = AF_INET;
+	sockaddr.sin_port = htons(8080);
+	sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	{
+		perror("socket call failed");
+		exit(0);
+	}
+	if ((bind(sockfd, (struct sockaddr*)&sockaddr, sizeof(sockaddr))) == -1)
+	{
+		perror("bind call failed");
+		exit(0);
+	}
+	listen(sockfd, 128);
+	return sockfd;
+}
+
+int main(void)
+{
+	int serverfd, clientfd;
+	int ready;
+	struct sockaddr_in clientaddr;
+	socklen_t addrlen;
+	int recvlen;
+	char recv_buf[1500];
+	char client_ip[16];
+	time_t tp;
+	char time_buf[1024];
+	bzero(time_buf, sizeof(time_buf));
+	bzero(recv_buf, sizeof(recv_buf));
+	bzero(client_ip, sizeof(client_ip));
+	serverfd = socket_init();
+	for (int i = 0; i < 100000; i++)
+	{
+		client_array[i].fd = -1;
+		client_array[i].events = POLLIN;//将所有监听集合中的成员设置为读事件监听
+	}
+	client_array[0].fd = serverfd;
+	printf("Testing select server sevice Runing. .\n");
+	while (Shutdown)
+	{
+		if ((ready = poll(client_array, 10000, -1)) == -1)//阻塞监听事件
+		{
+			perror("select call failed");
+			exit(0);
+		}
+		while (ready)
+		{
+			//辨别就绪
+			if (client_array[0].revents == POLLIN)
+			{
+				addrlen = sizeof(clientaddr);
+				if ((clientfd = accept(serverfd, (struct sockaddr*)&clientaddr, &addrlen)) == -1)
+				{
+					perror("accept call failed");
+					exit(0);
+				}
+				inet_ntop(AF_INET, &clientaddr.sin_addr.s_addr, client_ip, 16);
+				printf("Listen server socket success, call accept, client_ip %s client prot %d\n", client_ip, ntohs(clientaddr.sin_port));
+				return_responde(clientfd, client_ip);
+				for (int i = 1; i < 10000; i++)
+					if (client_array[i].fd == -1)
+					{
+						client_array[i].fd = clientfd;
+						break;
+					}
+			}
+			else
+			{
+				//仅处理一次客户端请求,单进程不允许客户端持续占用
+				for (int i = 1; i < 10000; i++)
+				{
+					if (client_array[i].fd != -1)
+						if (client_array[i].revents = POLLIN)
+						{
+							if ((recvlen = recv(client_array[i].fd, recv_buf, sizeof(recv_buf), 0)) > 0)
+							{
+								if (strcmp(recv_buf, "localtime\n") == 0)
+								{
+									tp = time(NULL);
+									ctime_r(&tp, time_buf);
+									send(client_array[i].fd, time_buf, strlen(time_buf), 0);
+									bzero(time_buf, sizeof(time_buf));
+								}
+								else
+								{
+									send(client_array[i].fd, "Please Try Again..\n", 20, 0);
+								}
+							}
+
+							else if (recvlen == 0)
+							{
+								close(client_array[i].fd);
+								client_array[i].fd = -1;
+								printf("User ex iting,delte this listen item,\n");
+							}
+							break;
+						}
+				}
+			}
+			--ready;
+		}
+	}
+	printf("server doen..\n");
+	close(serverfd);
+	return 0;
+}
+```
+3.epoll模型
+树的大小max==最大就绪数rfds== 就绪队列长度
+int epfd = epoll\_create(int max)//成功返回描述符，失败返回-1
+epoll\_ctl(epfd , EPOLL\_CTL\_ADD|EPOLL\_CTL\_DEL|EPOLL\_CTL\_MOD , int sockfd , struct epoll\_event \* node)
+int ready = epoll\_wait(epfd , struct epoll\_event \* ready\_array , int rfds , int timeout); timeout-1阻塞监)(>0定时阻塞) (0非阻塞)
+epoll监听到就绪后，会将就绪的节点传出到就绪队列中，用户只需要遍历就绪队列处理这些节点即可
 
 
-
-
-
+ 
