@@ -3369,6 +3369,411 @@ int epfd = epoll\_create(int max)//成功返回描述符，失败返回-1
 epoll\_ctl(epfd , EPOLL\_CTL\_ADD|EPOLL\_CTL\_DEL|EPOLL\_CTL\_MOD , int sockfd , struct epoll\_event \* node)
 int ready = epoll\_wait(epfd , struct epoll\_event \* ready\_array , int rfds , int timeout); timeout-1阻塞监)(>0定时阻塞) (0非阻塞)
 epoll监听到就绪后，会将就绪的节点传出到就绪队列中，用户只需要遍历就绪队列处理这些节点即可
+```c
+epoll:
+include<stdio.h>
+#include<unistd.h>
+#include<string.h>
+#include<sys/socket.h>
+#include<arpa/inet.h>
+#include<stdlib.h>
+#include<time.h>
+#include<poll.h>
+#include<sys/select.h>
+#include<sys/epoll.h>
+#define _EPOLL_MAX 200000
+int Shutdown = 1;
+struct epoll_event client_array[_EPOLL_MAX];//就绪队列
+int socket_init(void);//返回 socket
+int return_responde(int clientfd, const char* clientip);
+int return_responde(int clientfd, const char* clientip)
+{
+        char response[4096];
+        bzero(response, sizeof(response));
+        sprintf(response, "hi %s wellcome test TCP server!\n", clientip);
+        send(clientfd, response, strlen(response), 0);
+        return 0;
+}
+int socket_init(void)
+{
+        int sockfd;
+        struct sockaddr_in sockaddr;
+        bzero(&sockaddr, sizeof(sockaddr));
+        sockaddr.sin_family = AF_INET;
+        sockaddr.sin_port = htons(8080);
+        sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+        if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+        {
+                perror("socket call failed");
+                exit(0);
+        }
+        if ((bind(sockfd, (struct sockaddr*)&sockaddr, sizeof(sockaddr))) == -1)
+        {
+                perror("bind call failed");
+                exit(0);
+        }
+        listen(sockfd, 128);
+        return sockfd;
+}
+
+int main(void)
+{
+        int serverfd, clientfd;
+        int ready;
+        struct sockaddr_in clientaddr;
+        socklen_t addrlen;
+        int recvlen;
+        char recv_buf[1500];
+        char client_ip[16];
+        time_t tp;
+        char time_buf[1024];
+        int flag;
+        bzero(time_buf, sizeof(time_buf));
+        bzero(recv_buf, sizeof(recv_buf));
+        bzero(client_ip, sizeof(client_ip));
+        serverfd = socket_init();
+        struct epoll_event node;
+        int epfd;
+        //创建监听树
+        epfd = epoll_create(_EPOLL_MAX);
+        //添加监听节点
+        node.data.fd = serverfd;
+        node .events = EPOLLIN;
+        epoll_ctl(epfd,EPOLL_CTL_ADD,serverfd,&node);
+        printf("Testing epoll server sevice Runing. .\n");
+        while (Shutdown)
+        {
+                if ((ready = epoll_wait(epfd, client_array,_EPOLL_MAX, -1)) == -1)//阻塞监听事件
+                {
+                        perror("select call failed");
+                        exit(0);
+                }
+                flag=0;
+                while (ready)
+                {
+                        //辨别就绪
+                        if (client_array[flag].data.fd=serverfd)
+                        {
+                                addrlen = sizeof(clientaddr);
+                                if ((clientfd = accept(serverfd, (struct sockaddr*)&clientaddr, &addrlen)) == -1)
+                                {
+                                        perror("accept call failed");
+                                        exit(0);
+                                }
+                                inet_ntop(AF_INET, &clientaddr.sin_addr.s_addr, client_ip, 16);
+                                printf("Listen server socket success, call accept, client_ip %s client prot %d\n", client_ip, ntohs(clientaddr.sin_port));
+                                return_responde(clientfd, client_ip);
+                                node.data.fd=clientfd;
+                                node.events=EPOLLIN;
+                                epoll_ctl(epfd,EPOLL_CTL_ADD,clientfd,&node);
+                        }
+                        else
+                        {
+                                //仅处理一次客户端请求,单进程不允许客
+户端持续占用
+                                                        if ((recvlen = recv(client_array[flag].data.fd, recv_buf, sizeof(recv_buf), 0)) > 0)
+                                                        {
+                                                                if (strcmp(recv_buf, "localtime\n") == 0)
+                                                                {
+
+   tp = time(NULL);
+
+   ctime_r(&tp, time_buf);
+
+   send(client_array[flag].data.fd, time_buf, strlen(time_buf), 0);
+
+   bzero(time_buf, sizeof(time_buf));
+                                                                }
+                                                                else
+                                                                {
+
+   send(client_array[flag].data.fd, "Please Try Again..\n", 20, 0);
+                                                                }
+                                                        }
+
+                                                        else if (recvlen == 0)
+                                                        {
+                                                                }
+                                                        }
+
+                                                        else if (recvlen == 0)
+                                                        {
+                                                                close(client_array[flag].data.fd);
+                                                                epoll_ctl(epfd,EPOLL_CTL_DEL,client_array[flag].data.fd,NULL);
+                                                                printf("User ex iting,delte this listen item,\n");
+                                                        }
+                        }
+                        --ready;
+                        ++flag;
+                }
+        }
+        printf("server doen..\n");
+        close(serverfd);
+        return 0;
+}
+```
+epoll的监听树在内核层创建，每个监斯节点，只拷贝一次并且只挂 一次，避免了重复拷贝和挂载的开销
+callback，将监听的数播支为epitem，与网络设备绑定，实现监听
+[![55.png](https://i.postimg.cc/J4MwmmH8/55.png)](https://postimg.cc/PN3VzgMV)
+多线程使用epoll\_ctl进行访问，无现担心程安全问题， poll\_ctl带互库锁
+1.epoll有强大监听能力，而且没有额外开销，理论上可以监听系统最大描述符数量
+2.epoll监听到就绪直接传出就绪的socket到用户层， 用户直接处理即可
+3.epoll有丰富的监听事件设置监听的灵活性更好
+select 适用于低监听量， 高活跃的场景
+负载均衡技术:
+[![56.png](https://i.postimg.cc/HWtk5TMZ/56.png)](https://postimg.cc/fkJsQnBm)
+大量的用户请求可能导致 任务分发不均匀， 导致资源浪费， 不能很好的处理和响应
+通过预先设宽的分发策略， 最大的尝试均匀分发业务，让每台处理机都有任务负载
+代理服务器
+代理服务器是一个以数据中转为主要工作的中间件，代理服务器可以将用户的请求中转给处理服务器机，也可以将结果反馈给用户， 避免用户直接访问服务器主机，提高安全性(安全策略都可以部署在代理服务器中)，还可以进行任务的控制与分发，例如负载均衡可以在代理服务器中完成
+HA高可用性结构
+某个处理机宕机，可以通过HA概念将数据任务转发给正常的处理机
+[![57.png](https://i.postimg.cc/1Rf2pQf0/57.png)](https://postimg.cc/jCYMbB6C)
+5.EPOLL+线程池模型
+强大的socket监听能力，可以快速察觉所有套接字的处理事件 ，高并发出路能力，大量的用户请求可以快速处理
+线程池设计原则
+1).提高线程重用性，线程不能与用户绑定， 可以重复为多个用户处理业务，避免频繁创建销毁线程， 减少不必要开销
+2).预创建，提前准备好部分线程待用， 用户发送请求后直接选择线程处理，提高响应速度
+3).线程管理策略，设定线程池阈值，，通过阈值管理调度线程4).为服务器提供并发处理能力，可以更快处理请求或业务
+5.提高线程池的重用性， 用户实现任务， 线程池线程负责执行任务
+6.线程池使用生产者消费者实现 任务传递模式
+生产者 producer 消费面 customer 能理者 manager
+[![58.png](https://i.postimg.cc/yxhnPv9R/58.png)](https://postimg.cc/tnThRdBR)
+使用线程池最小网值 min，作为扩客编减故量
+当前任务量>=闲消费者数量 忙程数量占存活线程数量的70%
+当前线程数量 + 扩客量， 小于最大线程问值
+闲置线程是忙线程的倍散， 进行继减     当前线程散量·络减量， >=最小同值
+if\_thread\_alive(pthread\_t tid) //试探线程是否存活
+[![59.png](https://i.postimg.cc/NGXs21wQ/59.png)](https://postimg.cc/py2bg5TS)
+[![60.png](https://i.postimg.cc/QxkW1LrN/60.png)](https://postimg.cc/pprTM6T3)
+```c
+线程池：
+server.h:
+#include<stdio.h>
+#include<unistd.h>
+#include<signal.h>
+#include<string.h>
+#include<stdl1b.h>
+#include<pthread.h>
+
+typedef struct
+{
+void * (*busines)(void *);
+void * arg;
+}bs_t;
+
+typedef struct
+{
+int thread_shutdown;//线程池开关，如果1,关闭线程池
+int thread_max; //最大线程数
+int thread_min;//最小线程数
+int thread_alive; //有效线程数
+int thread_busy; //繁忙线
+//int kill numer; //缩减码
+bs t*queue;//任务队列
+int front;
+int rear;
+int cur;
+int max;
+pthread_cond_t Not_full;
+pthread_cond_t Not_Empty;
+pthread_t * ctids;//存储消费者id
+pthread_t mtid;//存储管理者
+}pool_t;//线程池模型
+
+int thread_pool_create(int Max,int Min ,int Omax);//线程池创建初始化
+int Producer_add_task(pool_t*p ，bs_t bs); //生产者添加任务模块,执行一次添加一次任务
+void * Customer_thread(void * arg); //消费者线程,参数为线程池地址
+void * Manager_thread(void * arg);//管理者线程,参数为线程池地址
+int thread_pool_destroy(pool_t *p); //销毁线程池资源
+void * user_business(void * arg); //自示义实现业务
+int if_thread_alive(pthread_t tid);//测试线程存活
+
+
+Customer_thread.c:
+#include<server.h>
+void * Customer_thread(void * arg)
+{
+pool_t * ptr = (pool_t *)arg;
+bs_t bs;
+pthread_detach(pthread_self());
+while(ptr->thread_shutdown)//持续会这获收业房
+{
+pthread_mutex_lock(&lock);
+while(ptr->cur==0)
+{
+pthread_cond_wait(&ptr->Not_Empty, &lock);
+if(!ptr->thread_shutdown)
+{
+pthread_mutex_unlock(&lock);
+printf("customer thread [0x%x] stlutdown its , exiting,.\n", (unsigned int)pthread_self());
+pthread_exit(NULL);
+//获取任务，执行任务
+bs.busines = ptr->queue[ptr->rear].busines;
+bs.arg= ptr->queue[ptr->rear].arg;
+--(ptr->cur);
+ptr->rear=(ptr->rear+1)% ptr->max;
+pthread_mutex_unlock(&lock);
+//唤醒生产者
+pthread_cond_signal(&ptr->Not_Full);
+printf("cusomte thread [0x%x] Get business addr %p , Runing..\n",(unsigned int)pthread_self(),bs.busines);
+bs.busines(bs.arg); //执行业务
+pthread_mutex_lock(&lock);
+--ptr->thread_busy;
+pthread_mutex_unlock(&lock);
+}
+printf("Customer thread [0x%x] shutdown its 0, exiting..\n",(unsigned int)pthread_self());
+pthread_exit(NULL);
+}
+
+
+if_thread_alive.c:
+#include<server.h>
+int if_thread_alive(pthread_t tid)
+{
+pthread_kill(tid,0);
+if(errno==ESRCH)
+return 0;
+return 1;
+}
+
+
+Manager_thread.c:
+#include<server.h>
+
+void * Manager_thread(void * arg)
+{
+pool_t * ptr=(pool_t * )arg;
+pthread_detach(pthread_self());
+int alive,cur,busy;
+pthread_mutex_lock(&lock);
+alive = ptr->thread_alive;
+busy = ptr->thread_busy;
+cur = ptr->cur;
+pthread_mutex_unlock(&lock);
+int flag,add;
+//持续执行
+while(ptr->thread_shutdown)
+{
+if((cur >= alive -busy || (double)busy / alive *100 >= 70) && alive + ptr->thread_min <= ptr->thread_max)
+{
+for(flag=0,add=0;flag < ptr->thread_max && add <ptr->thread_min;flag++)
+{
+if(ptr->ctids[flag]==0|| !if_thread_alive(ptr->ctids[flag]))
+{
+pthread_create(&ptr->ctids[flag],NULL,Customer_thread, (void *)ptr);
+add++;
+pthread_mutex_lock(&lock);
+++(ptr->thread_alive);
+pthread_mutex_unlock(&lock);
+}
+}
+}
+if(busy * 2 <=alive - busy && alive + ptr->thread_min >= ptr->thread_min)
+{
+}
+sleep(TIMEOUT);
+printf("thread shutdown its 0 , manager 0x%x exiting..\n",(unsigned int)pthread_self());
+pthread_exit(NULL);
+}
+
+
+thread_pool_create.c:
+#include<server.h>
+pool_t * thread_pool_create(int max, int min , int Omax)
+{
+/*中请空间初始化资源*/
+pool_t * ptr =NULL;
+if((ptr = (pool_t * )malloc(sizeof(pool_t)))==NULL)
+{
+perror("thread_pool_create error,malloc pool Failed");
+exit(0);
+}
+ptr->thread_shutdown =1;
+ptr->thread_max =max;
+ptr->thread_min =min;
+ptr->thread_alive =0;
+ptr->thread_busy =0;
+ptr->kill_number =0;
+if((ptr->queue =(bs_t * )malloc(sizeof(bs_t) * Qmax))==NULL)
+{
+perror("thread_pool_create error,malloc queue Failed");
+exit(0);
+}
+if((ptr->ctids=(pthread_t * )malloc(sizeof(pthread_t) * max))==NULL)
+{
+perror("thread_pool_create error,malloc ctids Failed");
+exit(0);
+}
+bzero(ptr->ctids,sizeof(pthread_t)*max);
+ptr->tront =0;
+ptr->rear = 0;
+ptr->cur = 0;
+ptr->max = Omax;
+if(pthread_cond_init(&ptr>Not_Full,NULL)!=0 ||pthread_cond_init(&ptr->Not_Empty,NULL)!=0||pthread_mutex_init(&lock,NULL)!=0)
+{
+printf("thread_pool_create error,init Lock or Cond Failedi\n");
+exit(0);
+}
+int err;
+for(int i=0;i<min;i++)
+{
+if((err = pthread_create(&ptr->ctids[i],NULL,Customer_thread,(void*)ptr))>0)
+{
+printf("thread_pool_create error,create custoner thread failed:%s\n",strerror(err));
+exit(0);
+}
+++ptr->thread_alive;
+}
+if((err=pthread_create(&ptr->mtid,NULL,Manager_thread,(void*)ptr))>0)
+{
+printf("thread pool create error, create Manager thread failed: %s\n",strerror(err));
+exit(0);
+}
+return ptr;
+}
+
+
+Produer_add_task.c:
+#include<server.h>
+int Producer_add_task(pool_t * p , bs_t bs)
+{
+//生产者向任务队列中添加一次任务
+if(p->thread_shutdown)
+{
+pthread_mutex_lock(slock);
+while(p->cur == p->max)
+{
+pthread_cond_wait(&p->Not_Full,&lock);
+if(!p->thread_shutdown)
+{
+pthread_mutex_unlock(&lock);
+printf("thread shutdown 0，Main thread exit..\n");
+pthread_exit(NULL);
+}
+}
+//添加业务
+p->queue[p->front].busines = bs.busines;
+p->queue[p->front].arg = bs.arg;
+++p->cur;
+p->front = (p->front + 1) % p->max;
+pthread_mutex_unlock(&lock);
+//唤醒一个消费者
+pthread_cond_signal(&p->Not_Empty);
+}
+else
+pthread_exit(NULL);
+printf("Producer thread [0x%x] add Busines success, business_addr =%p\n ",(unsigned int)pthread_self()bs.busines);
+return 0;
+}
+
+
+```
+
+
+
+
+
 
 
  
