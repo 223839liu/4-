@@ -3769,11 +3769,49 @@ return 0;
 
 
 ```
+int epfd = Epoll\_Create(int serverfd) //监听树创建初始化
+Epoll\_Listen(int server); //负责socket监听及业务添加
+[![61.png](https://i.postimg.cc/W3bDvwQZ/61.png)](https://postimg.cc/xkhjGMjj)
+[![63.png](https://i.postimg.cc/B6zr2Vj4/63.png)](https://postimg.cc/G8kgCzP5)
+水平触发模式，一轮监听的事件未处理完毕。不允许进行下一轮监听，如果用户使用epoll\_wait函数不会阻塞，会立即返回，返回值为未处理完毕的事件数量
+水平触发模式是epoll的默认监听模式，开销较大， 但是可以保证数据处理及时性和完整性
+EPOLL边缘触发模式，监听到就绪后，只会发送一次处理通知， 后续用户是否处理与epoll无关
+边缘触发模式下，一次就绪事件未处理完毕，可以使用epoll\_wait 直接进行第二轮监听
+设置监听模式以socket为单位，比较灵活，不同的socket可以用不同的监听模式
+node.data.fd = serverfd;
+nodeevents = EPOLLIN|EPOLLET
+EPOLLLT(水平触发) EPOLLET(边缘)
 
 
+正则表达式
+[![62.png](https://i.postimg.cc/CKcBsCHm/62.png)](https://postimg.cc/06Jy8w4w)
+正则元字符
+\转义符
+\*以前一个表达式为参照(一个字符)表示该表达式初恋0次或多次
+\+ 以前一个表达式为参照 (字符)表示该表达式出现1次或多次 使用时候需要转义
+.表示任意字符一次
+?以前一个字符为参照 匹配该字符0次或1次(需要转义)
+^以后一个表达式为参照(字符)表示该表达式是行首数据
+$以前一个表达式为参照(字符)表示该表达式是行尾数据
+默认情况下符号没有参照物表示普通字符 但是如果有参照物表示 正则匹配 有些特殊符号间也可以相互参照
+^和S单独出现表示任意字符开头或任意字符结尾 ^S表示匹配空行
+[abc] 字符集合使用时表示集合中任意一个字符
+[a-z] [A-Z] [0-9] 常用的三个集合
+[^a-z] 在集合中出现 表示集合内容取非 匹配所有非集合内容数据
+()创建子表达式 把多个字符表达式变为一个整体表达式
+(com\\|jp) 形成词集合
+{n} 以前一个表达式(字符)为参照表示表达式连续出现的频率
+{n.}
+{n .m} 指定数据最少及最大频率后 按从大到小的次数匹配
+正则匹配模式
+```
+<div>string01</div>pstring01<div> string02</div>pstring02<div>string03</div>
+<div>[^ <].+</div> 贪婪模式匹配，匹配快速，匹配次数少但是准确性低，尽可能多次匹配，
+匹配多个结果返回
+<div>string01</div>pstring01<div>string02</div>pstring02<div>string03</div>
+<div>[^<]+?</div> 非贪婪模式，提高匹配次数，降低匹配速度，
+提高匹配精度，匹配一个结果立即返回
+<a[^>]+?href="[^"]+?\.shtml"[>]*?>[<]+?</a>
+<a href="https://baidu.baike.com/OPENAl.shtml">百度</a>
+```
 
-
-
-
-
- 
