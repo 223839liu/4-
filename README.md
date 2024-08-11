@@ -3814,4 +3814,208 @@ $以前一个表达式为参照(字符)表示该表达式是行尾数据
 <a[^>]+?href="[^"]+?\.shtml"[>]*?>[<]+?</a>
 <a href="https://baidu.baike.com/OPENAl.shtml">百度</a>
 ```
+```c
+server.h:
+#include<signal.h>
+#include<string.h>
+#include<stdlib.h>
+#include<pthread.h>
+#include<errno.h>
+#include<sys/socket.h>
+#include<arpa/inet.h>
+#include<sys/epoll.h>
+#define TIME_OUT 1
+#define BACKLOG 128
+#define EPOLLMAX 100000
+int epfd;//全局变量监听描述符
+pthread_mutex_t lock;
+pthread _t ptid;//存输出线程id信息
+typedef struct
+{
+void * (*busines)(void*);
+void * arg;
+}bs_t;
+typedef struct
+{
+int thread_shutdown;//线程池开关，为1关闭线程池
+int thread_max;//最大线程数
+int thread_min;//最小线程数
+int thread_alive;//有效线程数
+int thread_busy;//繁忙线程
+int kill_number;//缩减码
+bs_t * queue;//任务队列
+int front;
+int rear;
+int cur;
+int max;
+pthread_cond_t Not_Full;//生产者
+pthread_cond_t Not_Empty//消费者
+pthread_t* ctids;7/存储消费著过
+pthread_t mtid;//存储管理者
+}pool_t;//线程池类型
+pool_t * PTR;
+pool_t * thread_pool_create(int Max,int Min, int Qmax);//线程池创建初始化
+int Producer_add_task(pool_t * p,bs_t bs);//生产者添加模块,执行一次添加一次
+void * Customer_thread(void * arg);//消费者线程参数为线程池地址
+void * Manageer_thread(void * arg);//管理者线程参数为线程池地址
+int thread_pool_destroy(pool_t * p);//销毁线程池资源
+void * user_business(void * arg);//自定义实现业务
+int if_thread_alive(pthread_t tid);//测试线程是否存活，存活返回1,死亡返回
+int Net_init(void);//网络初始化
+int EpolL_Create(int serverfd) ;//Epoll初始化
+int Epoll_Listen(int serrverfd);//监听
+void * Busines_Accept(void * arg);//连接业务
+void * Busines_Retime(void * arg);//处理返回时间业务
+void * printf_thread(void * arg);//显示线程
+void * sig_usr(int);//捕捉函数
 
+
+
+ Busines_Accept:
+ #include<server.h>
+void * Busines_Accept(void * arg)
+{
+int sockfd;
+struct sockaddr_in newaddr;
+struct epoll_event node;
+char response[1500];
+char ip[16];
+bzero(response,sizeof(response));
+bzero(ip,sizeof(ip));
+socklen_t addrlen;
+sockfd=*(int *)arg;
+int newsocket;
+addrlen=sizeof(newaddr);
+if((newsocket=accept(sockfd,(struct sockaddr*)&newaddr,&addrlen))==-1)
+{
+perror("busines_accept error,accept call failed");
+exit(0);
+}
+//连接成功后，将新的socket添加到监听集合中
+inet_ntop(AF_INET,&newaddr.sin_addr.s_addr,ip,16);
+node.data.fd=newsocket;
+node.events=EPOLLIN|EPOLLET;
+if((epoll_ctl(epfd,EPOLL_CTL_ADD,newsocket,&node))==-1)
+{
+perror("busines_accept error,epoll_ctl call failed");
+exit(0);
+}
+//向客户端发送反馈信号
+sprintf(response,"hi %s wellcome epoll thread demo..\n",ip);
+send(newsocket,response,strlen(response),MSG_NOSIGNAL);
+return NULL;
+}
+
+
+#include<server.h>
+void * Busines_Retime(void * arg)
+{
+time_t tp;
+int sockfd;
+char buffer[1500];
+char time_buf[1500];
+int recvlen;
+bzero(buffer,sizeof(buffer));
+bzero(time_buf,sizeof(time_buf));
+sockfd=*(int *)arg;
+while((recvlen=recv(sockfd,buffer,sizeof(buffer),MSG_DONTWAIT))==-1)
+{
+if(errno==EINTR)
+{
+break;
+}
+else
+{
+perror("busines retime error,reccv call failed");
+exit(0);
+}
+}
+if(recvlen==0)//客户端退出
+{
+close(sockfd);
+epoll_ctl(epfd,EPOLL_CTL_DEL,sockfd,NULL);//删除节点
+}
+else if(recv;en>0)
+{
+if(strcmp(buffer,"time\n")==0)
+{
+tp=time(NULL);
+ctime_r(&tp,time_buf);
+send(sockfd,time_buf,strlen(time_buf),MSG_NOSIGNAL);
+}
+else
+{
+send(sockfd,"Please try again..\n",19,MAG_NOSIGNAL);
+}
+}
+return NULL;
+}
+
+
+
+#include<server.h>
+int main(void)
+{
+//启动接口start
+//主线程设置对SIGUSR1屏蔽，继承给所有线程
+sigset_t set,oset;
+sigemptyset(&set);
+sigaddset(&set,SIGUSR1);
+sigprocmask(SIG_SETMASK,&set,&oset);
+int sockfd;
+pool_t  * ptr=NULL;
+sockfd=Net_init();
+epfd=Epoll_Create(sockfd);
+ptr=thread_pool_create(300,10,1000);
+Epoll_Listen(sockfd,ptr);
+if(!ptr->thread_shutdown)
+thread_pool_destroy(ptr);
+printf("epoll_thread server closing..\n");
+return 0;
+}
+
+
+#include<server.h>
+void  *printf_thread(void * arg)
+{
+pthread_detach(pthread_self());
+pool_t *ptr=(pool_t *)arg;
+struct sigaction act,oact;
+act.sa_handler=sig_usr;
+act_sa_flags=0;
+sigemptyset(&act.sa_mask);
+sigaction(SIGUSR1,&act,&oact);//设置捕捉
+sigprocmask(SIG_SETMASK,&act.sa_mask,NULL);//解除屏蔽
+PTR=ptr;
+while(ptr->thread_shutdown)
+{
+sleep(TIMEOUT);//等待信号
+}
+pthread_exit(NULL);
+}
+
+#include<server.h>
+void sig_usr(int n)
+{
+//显示一次阈值信号
+printf("[thread_epoll_server info][alive]%d[busy]%d[idel]%d[cur]%d[b/a]%.2f%%[a/m]%.2%%\n",PTR->thread-alive,PTR->thread_busy,PTR->thread_alive-PTR->thread_busy,(double)PTR->thread_busy/PTR->thread_alive*100,(double)PTR->thread_alive/PTR->thread_max*100);
+}
+
+
+INCLUDE_PATH=../include
+LIBRARY_PATH=../library
+INSTALL_PATH=./
+CC=gcc
+CFLAGS=-I$(INCLUDE_PATH)  -g -Wall -c
+CPPFLAGS=
+LDFLAGS=-lpthread
+TARGET=Thread_Epoll_ServerStart
+SRCFILE=$(wildcard *.c)
+DESTFILE=$(patsubst %.c,%.o,$(SRCFILE))
+RM=rm -rf
+$(TARGET):$(DESTFILE)
+                $(CC)	$^	$(LDFLAGS)	-o	$@
+%.o:%.c
+                $(CC)	$(LDFLAGS)	$<
+clean:
+		$(RM)	$(DESTFIL
