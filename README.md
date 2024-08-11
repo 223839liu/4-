@@ -3869,7 +3869,307 @@ void * Busines_Retime(void * arg);//处理返回时间业务
 void * printf_thread(void * arg);//显示线程
 void * sig_usr(int);//捕捉函数
 
+#include<server.h>
 
+pool_t * thread_pool_create(int max,int min,int Qmax)
+{
+//申请空间优化
+pool_t *ptr=NULL;
+if((ptr=(pool_t *)malloc(sizeof(pool_t)))==NULL)
+{
+perror("thread_pool_create error,malloc pool failed");
+exit(0);
+}
+ptr->thread_shutdown=1;
+ptr->thread_max=max;
+ptr->thread_min=min;
+ptr->thread_alive=0;
+ptr->thread_busy=0;
+ptr->kill_number=0;
+//申请队列空间
+if((ptr->queue=(bs_t *)malloc(sizeeof(bs_t )* Qmax))==NULL)
+{
+perror("thread_pool_create error,malloc queue failed");
+exit(0);
+}
+//申请存储消费者id的数组
+if((ptr->ctids=(pthread_t *)malloc(sizeof(pthread_t)*max))==NULL)
+{
+perror("thread_pool_create error,malloc ctids failed")
+exit(0);
+}
+bzero(ptr->ctids,sizeof(pthread_t)*max);
+ptr->front=0;
+ptr->rear=0;
+ptr->cur=0;
+ptr->max=Qmax;
+//互斥锁 条件变量初始化
+if(pthread_cond_init(&ptr->Not_Full,NULL)!=0||pthread_cond_init(&ptr->Not_Empty,NULL)!=0||pthread_mutex_init(&lock,NULL)!=0)
+{
+prinitf("thread_pool_create error,init or cond failed\n");
+exit(0);
+}
+//创建消费者
+int err;
+for(int i=0;i<min;i++)
+{
+if((err=pthread_create(&ptr->ctids[i],NULL,Customer_thread,(void *)ptr))>0)
+{
+perror("thread_pool_create error,create customer thread failed:%s\n",strerror(err));
+exit(0);
+}
+++ptr->thread_alive;//有效线程+1
+}
+//创建管理者
+if((err=pthread_create(&ptr->mtid,NULL,Manager_thread,(void *)ptr))>0)
+{
+perror("thread_pool_create error,create manager thread failed:%s\n",strerror(str));
+exit(0);
+}
+pthread_create(&ptid,NULL,printf_thread,(void *)ptr);
+//pthread_kill(ptid,SIGUSR1)//发送信号
+return ptr;
+}
+
+->#include<server.h>
+int Producer_add_task(pool_t * p,bs_t bs)
+{
+//生产者向任务队列中添加一次任务
+if(p->thread_shutdown)
+{
+p->pthread_mutex_lock(&lock);
+while(p->cur==p->max)
+{
+pthread_cond_wait(&p->Not_Full,&lock);//队列满挂起
+if(!p->thread_shutdown)//线程池关闭
+{
+//主线程退出
+pthread_mutex_unlock(&lock);
+printf("thread shutdown 0,main thread exit ..\n");
+pthread_exit(NULL);
+}
+}
+//添加业务
+p->queue[p->front].busines=bs.busines;
+p->queue[p->front].arg=bs.arg;
+++p->cur;
+p->front=(p->front+1)%p->max;
+pthread_mutex_unlock(&lock);
+pthread_kill(ptid,SIGUSR1);//发送信号
+//唤醒第一个消费者
+pthread_cond_signal(&p->Not_Empty);
+}
+else
+{
+printf("thread_shutdown 0,main thread exit..\n");
+pthread_exit(NULL);
+}
+printf("Producer thread [0x%x] add Busines success,busines_addr=%p\n",(unsigned int)pthread_self(),bs.busines);
+return 0;
+}
+
+#include<server.h>
+void * Customer_thread(void *arg)
+{
+pool_t *ptr=(pool_t *)arg;
+bs_t bs;
+pthread_detach(pthread_self());//不考虑回收设置分离态
+while(ptr->thread_shutdown)
+{
+pthread_mutex_lock(&lock);
+while(p->cur==0)
+{
+pthread_cond_wait(&p->Not_Empty,&lock);//队列空挂起
+if(!ptr->thread_shutdown)//线程池关闭
+{
+//线程退出
+pthread_mutex_unlock(&lock);
+printf("customer thread [0x%x] shutdown its 0,exit..\n",(unsigned int)pthread_self());
+pthread_exit(NULL);
+}
+if(ptr->kill_number)
+{
+if((ptr->kill_number-1)==0)
+pthread_kill(ptid,SIGUSR1);//发送信号
+--ptr->thread_alive;
+--ptr->kill_number;
+printf("customer thread [0x%x] exit,kill_number %d..\n",(unsigned int)pthread_self(),ptr->kill_number);
+pthread_mutex_unlock(&lock);
+pthread_exit(NULL);
+}
+}
+//获取业务，执行业务
+bs.busines=ptr->queue[ptr->rear].busines;
+bs.arg=ptr->queue[ptr->rear].arg;
+--ptr->cur;
+ptr->rear=(ptr->rear+1)%ptr->max;
+++ptr->thread_busy;//忙线程+1
+pthread_kill(ptid,ISGUSR1);//发送信号
+pthread_mutex_unlock(&lock);
+//唤醒生产者
+pthread_cond_signal(&ptr->Not_Full);
+printf("customer thread [0x%x] get busines_addr %p runing...\n",(unsigned int)pthread_self(),bs.busines);
+bs.busines(bs.arg);//调用函数执行业务
+pthread_mutex_lock(&lock);
+--ptr->thread_busy;//执行完变闲置线程
+pthread_kill(ptid,SIGUSR1);//发送信号
+pthread_mutex_unlock(&lock);
+}
+printf("customer thread [0x%x] shutdown its 0,exiting..\n",(unsigned int )pthread_self());
+pthread_exit(NULL);
+return 0;
+}
+
+#include<server.h>
+void * Manager_thread(void * arg)
+{
+pool_t * ptr=(pool_t *)arg;
+pthread_detach(pthread_self());
+int alive,cur,busy;
+pthread_mutex_lock(&lock);
+alive=ptr->thread_alive;
+cur=ptr->cur;
+busy=ptr->thread_busy;
+pthread_mutex_unlock(&lock);
+int flag,add;
+while(ptr->thread_shutdown)
+{
+if((cur>=alive-busy||(double)busy/alive*100>70)&&alive+ptr->thread_min<=ptr->thread_max)//扩容条件
+{
+for(flag=0,add=0;flag<ptr->thread_max&&add<ptr->thread_min;flag++)
+{//测试线程是否存活或者为0
+if(ptr->ctids[flag]==0||!if_thread_alive(ptr->ctids[flag]))
+{
+pthread_create(&ptr->ctids[flag],NULL,Customer_thread,(void *)ptr);
+add++;
+pthread_mutex_lock(&lock);
+++(ptr->thread_alive);
+pthread_mutex_unlock(&lock);
+}
+}
+}
+if(busy *2<=alive-busy &&alive-ptr->thread_min>=ptr->thread_min)//缩减条件
+{
+pthread_mutex_lock(&lock);
+ptr->kill_number=ptr->thread_min;
+pthread_mutex_unlock(&lock);
+for(int i=0;i<ptr->thread_min;i++)
+{
+pthread_cond_signal(&ptr->Not_Empty);
+}
+}
+sleep(TIMEOUT);
+}
+printf("thread shutdown its 0,manager 0x%x exiting..\n",(unsigned int)pthread_self());
+pthread_exit(NULL);
+}
+
+#include<server.h>
+int if_thread_alive(pthread_t tid)
+{
+pthread_kill(tid,0);
+if(errn[=ESRCH)
+return 0;
+return 1;
+}
+
+#include<server.h>
+int thread_pool_destroy(pool_t * ptr)
+{
+pthread_mutex_destroy(&lock);
+pthread_cond_destroy(&ptr->Not_Full);
+pthread_cond_destroy(&ptr->Not_Empty);
+free(ptr->ctids);
+free(ptr->queue);
+free(ptr);
+return 0;
+}
+
+#include<server.h>
+int Net_init(void)
+{
+int sockfd;
+struct sockaddr_in Addr;
+bzero(Addr,sizeof(Addr));
+Addr.sin_family=AF_INET;
+Addr.sin_port=htons(8080);
+Addr.sin_addr.s_addr=htonl(INADDR_ANY);
+if((sockfd=socket(AF_INET,SOCK_STREAM,0))==-1)
+{
+perror("Net_init error,socket call failed");
+exit(0);
+}
+if((bind(sockfd,(struct sockaddr*)&Addr,sizeof(Addr)))==-1)
+{
+perror("Net_init error,bind call failed");
+exit(0);
+}
+listen(sockfd,BACKLOG);
+return sockfd;
+}
+
+#include<server.h>
+int Epoll_Create(int sockfd)
+{
+int epfd;
+struct epoll_event node;//创建节点
+//创建监听树
+if((epfd=epoll_create(EPOLLMAX))=-1)
+{
+perror("Epoll_Create error,epoll_create call failed");
+exit(0);
+}
+node.data.fd=sockfd;
+node.events=EPOLLIN|EPOLLET;//设置边缘监听
+//添加监听节点
+if((epoll_ctl(epfd,EPOLL_CTL_ADD,sockfd,&node))=-1)
+{
+perror("Epoll_Create error,epoll_ctl call failed");
+exit(0);
+}
+return epfd;//返回监听描述符
+}
+
+#include<server.h>
+int Epoll_Listen(int sockfd,pool_t * ptr)
+{
+struct epoll_event ready_array[EPOLLMAX];//创建就绪队列
+int ready;//就绪数量
+int flag;//用来记录就绪队列
+ba_t tmp;
+printf("epoll_thread_server,epoll_listen runing..\n");
+while(ptr->thread_shutdown)
+{
+//阻塞监听等待事件发生
+if((ready=epoll_wait(epfd,ready_array,EPOLLMAX,-1))==-1)
+{
+perror("epoll_listen error,epoll_wait call failed");
+exit(0);
+}
+flag=0;
+while(ready)
+{
+if(ready_array[flag].data.fd==sockfd)
+{
+//进行连接
+tmp.busines=Busines_Accept;
+tmp.arg=(void *)&sockfd;
+Producer_add_task(ptr,tmp);//生产者添加连接任务
+}
+else
+{
+//处理时间业务
+tmp.busines=Busines_Retime;
+tmp.arg=(void *)&read_array[flag].data.fd;
+Producer_add_task(ptr,tmp);
+}
+++flag;
+--ready;
+}
+}
+close(sockfd);//关闭服务器套接字
+return 0;
+}
 
  Busines_Accept:
  #include<server.h>
@@ -4018,4 +4318,6 @@ $(TARGET):$(DESTFILE)
 %.o:%.c
                 $(CC)	$(LDFLAGS)	$<
 clean:
-		$(RM)	$(DESTFIL
+                $(RM)	$(DESTFIL
+
+		
